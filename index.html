@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="まいまい" />
+<meta name="theme-color" content="#0FA968" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2334C759'/%3E%3Cstop offset='1' stop-color='%230A7A4B'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Ctext x='32' y='34' font-family='Hiragino Sans,Noto Sans JP,sans-serif' font-size='38' font-weight='bold' fill='white' text-anchor='middle' dominant-baseline='central'%3E毎%3C/text%3E%3C/svg%3E" />
+<title>まいまい</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #F2F2F7;
+    --card: #FFFFFF;
+    --ink: #1a1a1a;
+    --secondary: rgba(60,60,67,0.6);
+    --tertiary: rgba(60,60,67,0.3);
+    --sep: rgba(60,60,67,0.18);
+    --blue: #007AFF;
+    --green: #0FA968;
+    --green-soft: rgba(15,169,104,0.12);
+    --red: #FF3B30;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); }
+  body {
+    font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+    color: var(--ink); font-size: 16px; -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+  #app {
+    height: var(--app-height, 100%);
+    display: flex; flex-direction: column;
+    padding-top: var(--safe-top);
+    transition: height 0.15s ease-out;
+  }
+  .view { display: none; flex-direction: column; flex: 1; min-height: 0; }
+  .view.active { display: flex; }
+
+  .navbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; min-height: 44px; position: relative;
+    background: rgba(242,242,247,0.92);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-bottom: 0.5px solid var(--sep); z-index: 10;
+  }
+  .navbar .title {
+    font-size: 17px; font-weight: 600;
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none; white-space: nowrap;
+  }
+  .icon-btn {
+    width: 36px; min-width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--green); background: none; border: 0; cursor: pointer;
+    font-family: inherit;
+  }
+
+  /* ---- リスト ---- */
+  .list-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 16px 24px; }
+  .progress-line {
+    font-size: 13px; color: var(--secondary); padding: 2px 4px 10px;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .progress-line .count { font-weight: 600; color: var(--green); }
+  .section-header {
+    font-size: 13px; font-weight: 600; color: var(--secondary);
+    padding: 18px 4px 6px; display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .section-header:first-child { padding-top: 2px; }
+  .section-header .count { color: var(--green); }
+  .card-group { background: var(--card); border-radius: 14px; overflow: hidden; }
+  .routine-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 14px; border-bottom: 0.5px solid var(--sep);
+    cursor: pointer; user-select: none; -webkit-user-select: none;
+  }
+  .routine-row:last-child { border-bottom: 0; }
+  .routine-row .check {
+    width: 26px; min-width: 26px; height: 26px; border-radius: 50%;
+    border: 2px solid var(--tertiary); display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .routine-row.done .check { background: var(--green); border-color: var(--green); }
+  .routine-row .check svg { opacity: 0; transition: opacity 0.15s; }
+  .routine-row.done .check svg { opacity: 1; }
+  .routine-row .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .routine-row.done .label { color: var(--tertiary); text-decoration: line-through; }
+  .empty-hint {
+    text-align: center; color: var(--tertiary); font-size: 14px; padding: 48px 24px;
+    line-height: 1.8;
+  }
+
+  /* ---- 過去のルーティン ---- */
+  .archive-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; border-bottom: 0.5px solid var(--sep);
+  }
+  .archive-row:last-child { border-bottom: 0; }
+  .archive-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .archive-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .archive-sub { font-size: 12px; color: var(--secondary); }
+  .archive-restore {
+    border: 0; border-radius: 999px; background: var(--green-soft); color: var(--green);
+    font-family: inherit; font-size: 13px; font-weight: 600; padding: 7px 14px; cursor: pointer;
+    flex-shrink: 0;
+  }
+  .archive-trash {
+    border: 0; background: none; color: var(--tertiary); cursor: pointer;
+    width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* ---- 下部タブバー ---- */
+  .tabbar {
+    display: flex; border-top: 0.5px solid var(--sep);
+    background: rgba(249,249,251,0.94);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    padding-bottom: var(--safe-bottom);
+  }
+  .tabbar button {
+    flex: 1; background: none; border: 0; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 7px 0 5px; color: var(--tertiary); font-family: inherit;
+  }
+  .tabbar button .tab-label { font-size: 10px; font-weight: 500; }
+  .tabbar button.active { color: var(--green); }
+  body.keyboard-open .tabbar { display: none; }
+
+  /* ---- シート（追加・編集） ---- */
+  .sheet-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 100;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s;
+  }
+  .sheet-backdrop.show { opacity: 1; pointer-events: auto; }
+  .sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 101;
+    background: var(--bg); border-radius: 16px 16px 0 0;
+    padding: 16px 16px calc(var(--safe-bottom) + 16px);
+    transform: translateY(105%); transition: transform 0.3s cubic-bezier(.32,.72,0,1);
+  }
+  body.keyboard-open .sheet { padding-bottom: 16px; }
+  .sheet.show { transform: translateY(0); }
+  .sheet h2 { font-size: 17px; font-weight: 600; text-align: center; margin-bottom: 14px; }
+  .sheet input[type="text"] {
+    width: 100%; font-family: inherit; font-size: 16px;
+    padding: 12px 14px; border: 0; border-radius: 12px; background: var(--card);
+    outline: none; margin-bottom: 14px;
+  }
+  .segmented {
+    display: flex; background: rgba(118,118,128,0.12); border-radius: 10px; padding: 2px;
+    margin-bottom: 16px;
+  }
+  .segmented button {
+    flex: 1; border: 0; background: none; font-family: inherit; font-size: 14px; font-weight: 500;
+    padding: 8px 0; border-radius: 8px; color: var(--ink); cursor: pointer;
+  }
+  .segmented button.active { background: var(--card); box-shadow: 0 1px 4px rgba(0,0,0,0.12); font-weight: 600; }
+  .sheet .primary-btn {
+    width: 100%; border: 0; border-radius: 13px; background: var(--green); color: #fff;
+    font-family: inherit; font-size: 16px; font-weight: 600; padding: 14px; cursor: pointer;
+  }
+  .sheet .primary-btn:disabled { opacity: 0.4; }
+  .sheet .danger-btn {
+    width: 100%; border: 0; border-radius: 13px; background: var(--card); color: var(--red);
+    font-family: inherit; font-size: 16px; font-weight: 600; padding: 14px; cursor: pointer;
+    margin-top: 10px;
+  }
+
+  /* ---- 設定 ---- */
+  .settings-scroll { flex: 1; overflow-y: auto; padding: 16px; }
+  .settings-group { background: var(--card); border-radius: 14px; overflow: hidden; margin-bottom: 20px; }
+  .settings-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 13px 14px; border-bottom: 0.5px solid var(--sep);
+    font-size: 16px; cursor: pointer; background: none; width: 100%;
+    border-left: 0; border-right: 0; border-top: 0; font-family: inherit; color: var(--ink);
+    text-align: left;
+  }
+  .settings-row:last-child { border-bottom: 0; }
+  .settings-row .chev { color: var(--tertiary); }
+  .settings-note { font-size: 12px; color: var(--secondary); padding: 0 6px 16px; line-height: 1.7; }
+
+  /* 更新バナー */
+  #updateBanner {
+    position: fixed; left: 12px; right: 12px;
+    bottom: calc(var(--safe-bottom) + 16px); z-index: 1000;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--green); color: #fff; border: 0; border-radius: 14px;
+    padding: 14px 18px; font-family: inherit; font-size: 14px; font-weight: 600;
+    box-shadow: 0 8px 28px rgba(15,169,104,0.4); cursor: pointer;
+    transform: translateY(140%); transition: transform 0.35s cubic-bezier(.32,.72,0,1);
+  }
+  #updateBanner.show { transform: translateY(0); }
+  #updateBanner svg { display: block; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- メイン（リスト）ビュー -->
+  <div id="mainView" class="view active">
+    <div class="navbar">
+      <button class="icon-btn" id="settingsBtn" aria-label="設定">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <span class="title" id="navTitle">毎日</span>
+      <button class="icon-btn" id="addBtn" aria-label="追加">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+    <div class="list-scroll" id="listScroll"></div>
+    <div class="tabbar" id="tabbar">
+      <button data-tab="daily" class="active">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <span class="tab-label">毎日</span>
+      </button>
+      <button data-tab="weekly">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+        <span class="tab-label">毎週</span>
+      </button>
+      <button data-tab="monthly">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4M8 13h2M14 13h2M8 17h2M14 17h2"/></svg>
+        <span class="tab-label">毎月</span>
+      </button>
+      <button data-tab="all">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
+        <span class="tab-label">すべて</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 設定ビュー -->
+  <div id="settingsView" class="view">
+    <div class="navbar">
+      <button class="icon-btn" id="settingsBackBtn" aria-label="戻る">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <span class="title">設定</span>
+      <span style="width:36px;"></span>
+    </div>
+    <div class="settings-scroll">
+      <div class="settings-group">
+        <button class="settings-row" id="archiveOpenBtn">
+          <span>過去のルーティン</span><span class="chev" id="archiveCount">›</span>
+        </button>
+      </div>
+      <div class="settings-group">
+        <button class="settings-row" id="exportBtn">
+          <span>データを書き出す（JSON）</span><span class="chev">›</span>
+        </button>
+        <button class="settings-row" id="importBtn">
+          <span>データを取り込む</span><span class="chev">›</span>
+        </button>
+      </div>
+      <div class="settings-note">
+        取り込みはスマートマージ（同じ項目は新しい方を採用）。iCloud Drive経由で他端末と手動同期できます。
+      </div>
+      <input type="file" id="importFile" accept="application/json" style="display:none;" />
+      <div style="text-align:center; padding: 10px; font-size: 12px; color: var(--tertiary);" id="versionLabel"></div>
+    </div>
+  </div>
+
+  <!-- 過去のルーティン ビュー -->
+  <div id="archiveView" class="view">
+    <div class="navbar">
+      <button class="icon-btn" id="archiveBackBtn" aria-label="戻る">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <span class="title">過去のルーティン</span>
+      <span style="width:36px;"></span>
+    </div>
+    <div class="list-scroll" id="archiveScroll"></div>
+  </div>
+</div>
+
+<!-- 追加・編集シート -->
+<div class="sheet-backdrop" id="sheetBackdrop"></div>
+<div class="sheet" id="editSheet">
+  <h2 id="sheetTitle">ルーティンを追加</h2>
+  <input type="text" id="titleInput" placeholder="例: 洗濯、プロテイン補充" enterkeyhint="done" />
+  <div class="segmented" id="freqSeg">
+    <button data-freq="daily">毎日</button>
+    <button data-freq="weekly">毎週</button>
+    <button data-freq="monthly">毎月</button>
+  </div>
+  <button class="primary-btn" id="saveBtn">保存</button>
+  <button class="danger-btn" id="deleteBtn" style="display:none;">やめる（過去のルーティンに残す）</button>
+</div>
+
+<script>
+  // ---------- DOM helper ----------
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+  // ---------- IndexedDB ----------
+  const DB_NAME = 'maimai-db';
+  const DB_VERSION = 1;
+  const STORES = ['items'];
+  let _db = null;
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        for (const s of STORES) {
+          if (!db.objectStoreNames.contains(s)) db.createObjectStore(s, { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = () => { _db = req.result; resolve(_db); };
+      req.onerror = () => reject(req.error);
+    });
+  }
+  function tx(store, mode = 'readonly') { return _db.transaction(store, mode).objectStore(store); }
+  function getAll(store) {
+    return new Promise((res, rej) => { const r = tx(store).getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  }
+  function put(store, val) {
+    return new Promise((res, rej) => { const r = tx(store, 'readwrite').put(val); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
+  }
+  function del(store, id) {
+    return new Promise((res, rej) => { const r = tx(store, 'readwrite').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
+  }
+
+  // ---------- バージョン ----------
+  const APP_VERSION = '1.1.0';
+  function renderVersionLabel() {
+    const el = document.getElementById('versionLabel');
+    if (el) el.textContent = 'まいまい v' + APP_VERSION;
+  }
+
+  // ---------- 期間キー ----------
+  // 完了状態は donePeriod（期間キー）で持つ。期間が変われば自動で未完了に見える。
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function isoWeekKey(d) {
+    // ISO週番号（月曜始まり）
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil(((date - yearStart) / 86400000 + 1) / 7);
+    return date.getUTCFullYear() + '-W' + pad(weekNo);
+  }
+  function periodKey(freq, d = new Date()) {
+    if (freq === 'daily') return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    if (freq === 'weekly') return isoWeekKey(d);
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1);
+  }
+  function isDone(item) { return item.donePeriod === periodKey(item.freq); }
+
+  // ---------- State ----------
+  const FREQS = ['daily', 'weekly', 'monthly'];
+  const FREQ_LABEL = { daily: '毎日', weekly: '毎週', monthly: '毎月' };
+  const TAB_TITLE = { daily: '毎日', weekly: '毎週', monthly: '毎月', all: 'すべて' };
+  const state = { items: [], tab: 'daily', editingId: null, sheetFreq: 'daily' };
+
+  async function loadAll() {
+    state.items = await getAll('items');
+    state.items.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  }
+  function activeItems() { return state.items.filter((i) => !i.archivedAt); }
+  function archivedItems() {
+    return state.items.filter((i) => i.archivedAt).sort((a, b) => (b.archivedAt || 0) - (a.archivedAt || 0));
+  }
+
+  // ---------- Render ----------
+  const checkSVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+
+  function rowHTML(item) {
+    const done = isDone(item);
+    return '<div class="routine-row' + (done ? ' done' : '') + '" data-id="' + item.id + '">' +
+      '<span class="check">' + checkSVG + '</span>' +
+      '<span class="label"></span>' +
+    '</div>';
+  }
+
+  function renderList() {
+    $('#navTitle').textContent = TAB_TITLE[state.tab];
+    const scroll = $('#listScroll');
+    scroll.innerHTML = '';
+
+    const freqsToShow = state.tab === 'all' ? FREQS : [state.tab];
+    let totalRendered = 0;
+
+    for (const freq of freqsToShow) {
+      const items = activeItems().filter((i) => i.freq === freq);
+      if (state.tab === 'all' && items.length === 0) continue;
+
+      const doneCount = items.filter(isDone).length;
+      const header = document.createElement('div');
+      if (state.tab === 'all') {
+        header.className = 'section-header';
+        header.innerHTML = '<span>' + FREQ_LABEL[freq] + '</span><span class="count">' + doneCount + ' / ' + items.length + '</span>';
+      } else {
+        header.className = 'progress-line';
+        const periodName = freq === 'daily' ? '今日' : freq === 'weekly' ? '今週' : '今月';
+        header.innerHTML = '<span>' + periodName + 'の完了</span><span class="count">' + doneCount + ' / ' + items.length + '</span>';
+      }
+      scroll.appendChild(header);
+
+      const group = document.createElement('div');
+      group.className = 'card-group';
+      const sorted = [...items.filter((i) => !isDone(i)), ...items.filter(isDone)];
+      for (const item of sorted) {
+        group.insertAdjacentHTML('beforeend', rowHTML(item));
+        group.lastElementChild.querySelector('.label').textContent = item.title;
+      }
+      if (items.length > 0) scroll.appendChild(group);
+      totalRendered += items.length;
+    }
+
+    if (totalRendered === 0) {
+      scroll.innerHTML = '<div class="empty-hint">まだルーティンがありません<br>右上の「＋」で追加</div>';
+    }
+  }
+
+  // ---------- 行操作 ----------
+  $('#listScroll').addEventListener('click', async (e) => {
+    const row = e.target.closest('.routine-row');
+    if (!row) return;
+    const item = state.items.find((i) => i.id === row.dataset.id);
+    if (!item) return;
+    if (e.target.closest('.check')) {
+      // チェック切り替え
+      item.donePeriod = isDone(item) ? null : periodKey(item.freq);
+      item.updatedAt = Date.now();
+      await put('items', item);
+      renderList();
+    } else {
+      openSheet(item);
+    }
+  });
+
+  // ---------- タブ ----------
+  $('#tabbar').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-tab]');
+    if (!btn) return;
+    state.tab = btn.dataset.tab;
+    $$('#tabbar button').forEach((b) => b.classList.toggle('active', b === btn));
+    renderList();
+  });
+
+  // ---------- シート（追加・編集） ----------
+  function setSheetFreq(freq) {
+    state.sheetFreq = freq;
+    $$('#freqSeg button').forEach((b) => b.classList.toggle('active', b.dataset.freq === freq));
+  }
+  $('#freqSeg').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-freq]');
+    if (btn) setSheetFreq(btn.dataset.freq);
+  });
+
+  function openSheet(item = null) {
+    state.editingId = item ? item.id : null;
+    $('#sheetTitle').textContent = item ? 'ルーティンを編集' : 'ルーティンを追加';
+    $('#titleInput').value = item ? item.title : '';
+    $('#deleteBtn').style.display = item ? '' : 'none';
+    setSheetFreq(item ? item.freq : (state.tab === 'all' ? 'daily' : state.tab));
+    $('#sheetBackdrop').classList.add('show');
+    $('#editSheet').classList.add('show');
+    if (!item) setTimeout(() => $('#titleInput').focus(), 320);
+  }
+  function closeSheet() {
+    $('#sheetBackdrop').classList.remove('show');
+    $('#editSheet').classList.remove('show');
+    $('#titleInput').blur();
+  }
+  $('#sheetBackdrop').addEventListener('click', closeSheet);
+  $('#addBtn').addEventListener('click', () => openSheet());
+  $('#titleInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#saveBtn').click(); });
+
+  $('#saveBtn').addEventListener('click', async () => {
+    const title = $('#titleInput').value.trim();
+    if (!title) return;
+    if (state.editingId) {
+      const item = state.items.find((i) => i.id === state.editingId);
+      if (item) {
+        if (item.freq !== state.sheetFreq) item.donePeriod = null; // 周期変更時はリセット
+        item.title = title;
+        item.freq = state.sheetFreq;
+        item.updatedAt = Date.now();
+        await put('items', item);
+      }
+    } else {
+      const item = {
+        id: uid(), title, freq: state.sheetFreq,
+        donePeriod: null, createdAt: Date.now(), updatedAt: Date.now(),
+      };
+      await put('items', item);
+      state.items.push(item);
+    }
+    await loadAll();
+    closeSheet();
+    renderList();
+  });
+
+  $('#deleteBtn').addEventListener('click', async () => {
+    if (!state.editingId) return;
+    // 消さずにアーカイブ（「過去のルーティン」から閲覧・復活できる）
+    const item = state.items.find((i) => i.id === state.editingId);
+    if (!item) return;
+    item.archivedAt = Date.now();
+    item.updatedAt = Date.now();
+    await put('items', item);
+    await loadAll();
+    closeSheet();
+    renderList();
+  });
+
+  // ---------- 設定 ----------
+  function showView(id) {
+    $$('.view').forEach((v) => v.classList.toggle('active', v.id === id));
+  }
+  $('#settingsBtn').addEventListener('click', () => { renderArchiveCount(); showView('settingsView'); });
+  $('#settingsBackBtn').addEventListener('click', () => showView('mainView'));
+  $('#archiveOpenBtn').addEventListener('click', () => { renderArchive(); showView('archiveView'); });
+  $('#archiveBackBtn').addEventListener('click', () => { renderArchiveCount(); showView('settingsView'); });
+
+  // ---------- 過去のルーティン ----------
+  function renderArchiveCount() {
+    const n = archivedItems().length;
+    $('#archiveCount').textContent = n > 0 ? n + ' ›' : '›';
+  }
+  function fmtDate(ts) {
+    const d = new Date(ts);
+    return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+  }
+  function renderArchive() {
+    const scroll = $('#archiveScroll');
+    scroll.innerHTML = '';
+    const items = archivedItems();
+    if (items.length === 0) {
+      scroll.innerHTML = '<div class="empty-hint">過去のルーティンはありません<br>編集シートで「やめる」にすると<br>ここに残ります</div>';
+      return;
+    }
+    const group = document.createElement('div');
+    group.className = 'card-group';
+    for (const item of items) {
+      const row = document.createElement('div');
+      row.className = 'archive-row';
+      row.dataset.id = item.id;
+      row.innerHTML =
+        '<div class="archive-meta">' +
+          '<span class="archive-title"></span>' +
+          '<span class="archive-sub">' + FREQ_LABEL[item.freq] + '・' + fmtDate(item.archivedAt) + 'にやめた</span>' +
+        '</div>' +
+        '<button class="archive-restore" data-act="restore">戻す</button>' +
+        '<button class="archive-trash" data-act="trash" aria-label="完全に削除">' +
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>' +
+        '</button>';
+      row.querySelector('.archive-title').textContent = item.title;
+      group.appendChild(row);
+    }
+    scroll.appendChild(group);
+  }
+  $('#archiveScroll').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const row = btn.closest('.archive-row');
+    const item = state.items.find((i) => i.id === row.dataset.id);
+    if (!item) return;
+    if (btn.dataset.act === 'restore') {
+      item.archivedAt = null;
+      item.donePeriod = null;
+      item.updatedAt = Date.now();
+      await put('items', item);
+      await loadAll();
+      renderArchive();
+      renderList();
+    } else if (btn.dataset.act === 'trash') {
+      if (!confirm('「' + item.title + '」を完全に削除しますか？\nこの操作は戻せません。')) return;
+      await del('items', item.id);
+      await loadAll();
+      renderArchive();
+    }
+  });
+
+  // ---------- JSON 書き出し/取り込み ----------
+  const SCHEMA = 'maimai.v1';
+  $('#exportBtn').addEventListener('click', () => {
+    const data = { schema: SCHEMA, exportedAt: new Date().toISOString(), items: state.items };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'maimai-sync.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+  $('#importBtn').addEventListener('click', () => $('#importFile').click());
+  $('#importFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      if (data.schema !== SCHEMA) { alert('まいまいのデータではないようです'); return; }
+      const localById = new Map(state.items.map((n) => [n.id, n]));
+      for (const it of (data.items || [])) {
+        const local = localById.get(it.id);
+        if (!local || (it.updatedAt || 0) > (local.updatedAt || 0)) await put('items', it);
+      }
+      await loadAll();
+      renderList();
+      alert('取り込みました');
+    } catch (err) {
+      alert('取り込みに失敗しました');
+    }
+    e.target.value = '';
+  });
+
+  // ---------- 起動 ----------
+  (async function init() {
+    setupViewportTracking();
+    await openDB();
+    await loadAll();
+    renderList();
+    renderVersionLabel();
+  })();
+
+  // 日付が変わった後にアプリへ戻ったとき、完了状態を最新の期間で描き直す
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') renderList();
+  });
+
+  // ---------- visualViewport（キーボード対策） ----------
+  function setupViewportTracking() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const root = document.documentElement;
+    let baseHeight = vv.height;
+    function apply() {
+      root.style.setProperty('--app-height', vv.height + 'px');
+      document.body.classList.toggle('keyboard-open', vv.height < baseHeight - 120);
+    }
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+    window.addEventListener('orientationchange', () => { setTimeout(() => { baseHeight = vv.height; apply(); }, 300); });
+    apply();
+  }
+
+  // ---------- Service Worker + 自動アップデート ----------
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+      try {
+        const swUrl = new URL('sw.js', location.href).href;
+        const res = await fetch(swUrl, { method: 'HEAD' });
+        if (!res.ok) return;
+        const reg = await navigator.serviceWorker.register('sw.js');
+        if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner(reg.waiting);
+        reg.addEventListener('updatefound', () => {
+          const sw = reg.installing;
+          if (!sw) return;
+          sw.addEventListener('statechange', () => {
+            if (sw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner(sw);
+          });
+        });
+        reg.update();
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update(); });
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return; refreshing = true; window.location.reload();
+        });
+      } catch (e) {}
+    });
+  }
+  function showUpdateBanner(waitingSW) {
+    if (document.getElementById('updateBanner')) return;
+    const b = document.createElement('button');
+    b.id = 'updateBanner';
+    b.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg><span>新しいバージョンがあります — タップで更新</span>';
+    b.addEventListener('click', () => {
+      b.disabled = true; b.querySelector('span').textContent = '更新中…';
+      waitingSW.postMessage('SKIP_WAITING');
+    });
+    document.body.appendChild(b);
+    requestAnimationFrame(() => b.classList.add('show'));
+  }
+</script>
+</body>
+</html>
