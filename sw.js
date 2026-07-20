@@ -5,7 +5,7 @@
 // - アイコン等の静的アセットはキャッシュ優先（速さ重視）
 // CACHE の数字を上げるたびに「新しいバージョン」として検知される。
 // リリース時は index.html の APP_VERSION と必ずセットで上げること。
-const CACHE = 'maimai-v1-1-0';
+const CACHE = 'maimai-v1-2-2';
 const ASSETS = [
   './',
   './index.html',
