@@ -80,12 +80,21 @@
   .section-header:first-child { padding-top: 2px; }
   .section-header .count { color: var(--green); }
   .card-group { background: var(--card); border-radius: 14px; overflow: hidden; }
+  .row-wrap { position: relative; overflow: hidden; border-bottom: 0.5px solid var(--sep); }
+  .row-wrap:last-child { border-bottom: 0; }
+  .row-actions { position: absolute; top: 0; right: 0; height: 100%; display: flex; }
+  .row-act {
+    width: 76px; border: 0; color: #fff; font-family: inherit;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .row-act.edit { background: #8E8E93; }
+  .row-act.stop { background: var(--red); }
   .routine-row {
     display: flex; align-items: center; gap: 12px;
-    padding: 13px 14px; border-bottom: 0.5px solid var(--sep);
+    padding: 13px 14px; background: var(--card); position: relative;
     cursor: pointer; user-select: none; -webkit-user-select: none;
+    transition: transform 0.25s cubic-bezier(.32,.72,0,1);
   }
-  .routine-row:last-child { border-bottom: 0; }
   .routine-row .check {
     width: 26px; min-width: 26px; height: 26px; border-radius: 50%;
     border: 2px solid var(--tertiary); display: flex; align-items: center; justify-content: center;
@@ -384,7 +393,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '1.2.2';
+  const APP_VERSION = '1.3.0';
   function renderVersionLabel() {
     const el = document.getElementById('versionLabel');
     if (el) el.textContent = 'まいまい v' + APP_VERSION;
@@ -428,18 +437,26 @@
   const checkSVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
 
   const sunSVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F5A623" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
-  function rowHTML(item) {
+  function rowHTML(item, withActions = true) {
     const done = isDone(item);
-    return '<div class="routine-row' + (done ? ' done' : '') + '" data-id="' + item.id + '">' +
-      '<span class="check">' + checkSVG + '</span>' +
-      (item.morning ? '<span class="sun">' + sunSVG + '</span>' : '') +
-      '<span class="label"></span>' +
+    return '<div class="row-wrap">' +
+      (withActions ?
+        '<div class="row-actions">' +
+          '<button class="row-act edit" data-act="edit">編集</button>' +
+          '<button class="row-act stop" data-act="stop">やめる</button>' +
+        '</div>' : '') +
+      '<div class="routine-row' + (done ? ' done' : '') + '" data-id="' + item.id + '">' +
+        '<span class="check">' + checkSVG + '</span>' +
+        (item.morning ? '<span class="sun">' + sunSVG + '</span>' : '') +
+        '<span class="label"></span>' +
+      '</div>' +
     '</div>';
   }
 
   function renderList() {
     $('#navTitle').textContent = TAB_TITLE[state.tab];
     const scroll = $('#listScroll');
+    swipedRow = null;
     scroll.innerHTML = '';
 
     const freqsToShow = state.tab === 'all' ? FREQS : [state.tab];
@@ -481,21 +498,82 @@
   }
 
   // ---------- 行操作 ----------
+  async function toggleItem(item, rerender) {
+    item.donePeriod = isDone(item) ? null : periodKey(item.freq);
+    item.updatedAt = Date.now();
+    await put('items', item);
+    rerender();
+  }
+
   $('#listScroll').addEventListener('click', async (e) => {
+    // スワイプで出したアクションボタン
+    const act = e.target.closest('.row-act');
+    if (act) {
+      const row = act.closest('.row-wrap').querySelector('.routine-row');
+      const item = state.items.find((i) => i.id === row.dataset.id);
+      if (!item) return;
+      closeSwipedRow();
+      if (act.dataset.act === 'edit') {
+        openSheet(item);
+      } else {
+        item.archivedAt = Date.now();
+        item.updatedAt = Date.now();
+        await put('items', item);
+        await loadAll();
+        renderList();
+      }
+      return;
+    }
     const row = e.target.closest('.routine-row');
     if (!row) return;
+    if (suppressClick) return;            // スワイプ直後のタップは無視
+    if (swipedRow) { closeSwipedRow(); return; }  // 開いてる行を閉じるだけ
     const item = state.items.find((i) => i.id === row.dataset.id);
-    if (!item) return;
-    if (e.target.closest('.check')) {
-      // チェック切り替え
-      item.donePeriod = isDone(item) ? null : periodKey(item.freq);
-      item.updatedAt = Date.now();
-      await put('items', item);
-      renderList();
-    } else {
-      openSheet(item);
-    }
+    if (item) await toggleItem(item, renderList);
   });
+
+  // ---------- スワイプ（左スワイプで編集／やめる） ----------
+  const ACTION_W = 152;
+  let swipedRow = null, sw = null, suppressClick = false;
+  function closeSwipedRow() {
+    if (!swipedRow) return;
+    swipedRow.style.transform = '';
+    swipedRow = null;
+  }
+  const scrollEl = $('#listScroll');
+  scrollEl.addEventListener('touchstart', (e) => {
+    const row = e.target.closest('.routine-row');
+    if (!row) { closeSwipedRow(); return; }
+    sw = { row, x: e.touches[0].clientX, y: e.touches[0].clientY,
+           base: swipedRow === row ? -ACTION_W : 0, dir: null, tx: 0, moved: false };
+  }, { passive: true });
+  scrollEl.addEventListener('touchmove', (e) => {
+    if (!sw) return;
+    const dx = e.touches[0].clientX - sw.x;
+    const dy = e.touches[0].clientY - sw.y;
+    if (!sw.dir) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      sw.dir = Math.abs(dx) > Math.abs(dy) * 1.5 ? 'h' : 'v';
+      if (sw.dir === 'h' && swipedRow && swipedRow !== sw.row) closeSwipedRow();
+    }
+    if (sw.dir !== 'h') return;
+    e.preventDefault();
+    sw.moved = true;
+    sw.tx = Math.max(-ACTION_W - 16, Math.min(0, sw.base + dx));
+    sw.row.style.transition = 'none';
+    sw.row.style.transform = 'translateX(' + sw.tx + 'px)';
+  }, { passive: false });
+  scrollEl.addEventListener('touchend', () => {
+    if (!sw) return;
+    const { row, dir, tx, moved } = sw;
+    sw = null;
+    if (dir !== 'h') return;
+    row.style.transition = '';
+    if (tx < -ACTION_W / 2) { row.style.transform = 'translateX(-' + ACTION_W + 'px)'; swipedRow = row; }
+    else { row.style.transform = ''; if (swipedRow === row) swipedRow = null; }
+    if (moved) { suppressClick = true; setTimeout(() => { suppressClick = false; }, 350); }
+  });
+  scrollEl.addEventListener('scroll', () => { if (swipedRow && !sw) closeSwipedRow(); }, { passive: true });
 
   // ---------- タブ ----------
   function setTab(tab) {
@@ -613,10 +691,10 @@
     list.innerHTML = '';
     const sorted = [...items.filter((i) => !isDone(i)), ...items.filter(isDone)];
     for (const item of sorted) {
-      list.insertAdjacentHTML('beforeend', rowHTML(item));
-      const row = list.lastElementChild;
-      row.classList.add('morning-row');
-      row.querySelector('.label').textContent = item.title;
+      list.insertAdjacentHTML('beforeend', rowHTML(item, false));
+      const wrap = list.lastElementChild;
+      wrap.querySelector('.routine-row').classList.add('morning-row');
+      wrap.querySelector('.label').textContent = item.title;
     }
   }
   // 寝ぼけ仕様: 行のどこをタップしてもチェック
@@ -624,11 +702,7 @@
     const row = e.target.closest('.routine-row');
     if (!row) return;
     const item = state.items.find((i) => i.id === row.dataset.id);
-    if (!item) return;
-    item.donePeriod = isDone(item) ? null : periodKey(item.freq);
-    item.updatedAt = Date.now();
-    await put('items', item);
-    renderMorning();
+    if (item) await toggleItem(item, renderMorning);
   });
   $('#morningExitBtn').addEventListener('click', () => {
     localStorage.setItem(MORNING_DISMISS_KEY, periodKey('daily'));
