@@ -412,7 +412,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '1.4.0';
+  const APP_VERSION = '1.4.1';
   function renderVersionLabel() {
     const el = document.getElementById('versionLabel');
     if (el) el.textContent = 'まいまい v' + APP_VERSION;
@@ -558,16 +558,19 @@
 
   // ---------- トースト ----------
   let toastTimer = null;
+  function hideToast() {
+    $('#toast').style.transform = 'translateY(160%)';
+    clearTimeout(toastTimer);
+  }
   function showToast(msg, onUndo) {
     const toast = $('#toast');
     $('#toastMsg').textContent = msg;
     const undoBtn = $('#toastUndo');
     undoBtn.style.display = onUndo ? '' : 'none';
-    const hide = () => { toast.style.transform = 'translateY(160%)'; clearTimeout(toastTimer); };
-    undoBtn.onclick = async () => { hide(); if (onUndo) await onUndo(); };
+    undoBtn.onclick = async () => { hideToast(); if (onUndo) await onUndo(); };
     toast.style.transform = 'translateY(0)';
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(hide, 5000);
+    toastTimer = setTimeout(hideToast, 4000);
   }
 
   $('#listScroll').addEventListener('click', async (e) => {
@@ -849,6 +852,7 @@
 
   // ---------- 設定 ----------
   function showView(id) {
+    hideToast();  // 画面が変わったらトーストは即消す
     $$('.view').forEach((v) => v.classList.toggle('active', v.id === id));
   }
   $('#settingsBtn').addEventListener('click', () => { renderArchiveCount(); showView('settingsView'); });
