@@ -352,7 +352,7 @@
 </div>
 
 <!-- アンドゥ用トースト -->
-<div id="toast" style="position:fixed; left:12px; right:12px; bottom:calc(var(--safe-bottom) + 74px); z-index:900; display:flex; align-items:center; justify-content:space-between; gap:12px; background:rgba(40,40,42,0.96); color:#fff; border-radius:14px; padding:12px 16px; font-size:14px; box-shadow:0 8px 28px rgba(0,0,0,0.3); transform:translateY(160%); transition:transform 0.3s cubic-bezier(.32,.72,0,1);">
+<div id="toast" style="position:fixed; left:12px; right:12px; bottom:calc(var(--safe-bottom) + 74px); z-index:900; display:none; align-items:center; justify-content:space-between; gap:12px; background:rgba(40,40,42,0.96); color:#fff; border-radius:14px; padding:12px 16px; font-size:14px; box-shadow:0 8px 28px rgba(0,0,0,0.3); opacity:0; transform:translateY(12px); transition:opacity 0.25s ease, transform 0.25s ease;">
   <span id="toastMsg" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
   <button id="toastUndo" style="border:0; background:none; color:#4DA6FF; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; flex-shrink:0;">元に戻す</button>
 </div>
@@ -412,7 +412,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '1.4.1';
+  const APP_VERSION = '1.4.2';
   function renderVersionLabel() {
     const el = document.getElementById('versionLabel');
     if (el) el.textContent = 'まいまい v' + APP_VERSION;
@@ -559,8 +559,11 @@
   // ---------- トースト ----------
   let toastTimer = null;
   function hideToast() {
-    $('#toast').style.transform = 'translateY(160%)';
     clearTimeout(toastTimer);
+    const toast = $('#toast');
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(12px)';
+    setTimeout(() => { toast.style.display = 'none'; }, 250);
   }
   function showToast(msg, onUndo) {
     const toast = $('#toast');
@@ -568,8 +571,13 @@
     const undoBtn = $('#toastUndo');
     undoBtn.style.display = onUndo ? '' : 'none';
     undoBtn.onclick = async () => { hideToast(); if (onUndo) await onUndo(); };
-    toast.style.transform = 'translateY(0)';
     clearTimeout(toastTimer);
+    toast.style.display = 'flex';
+    // 表示を反映させてからフェードイン
+    requestAnimationFrame(() => {
+      toast.style.opacity = '1';
+      toast.style.transform = 'translateY(0)';
+    });
     toastTimer = setTimeout(hideToast, 4000);
   }
 
