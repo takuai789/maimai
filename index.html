@@ -307,6 +307,15 @@
     </div>
     <div class="settings-scroll">
       <div class="settings-group">
+        <div class="settings-row" style="cursor:default;">
+          <span>朝モードで起動する</span>
+          <div class="switch" id="morningModeSwitch"></div>
+        </div>
+      </div>
+      <div class="settings-note">
+        オンにすると、朝（4〜10時）にアプリを開いたとき、朝ルーティンだけの画面で起動します。オフにすると常に通常画面で起動します。
+      </div>
+      <div class="settings-group">
         <button class="settings-row" id="archiveOpenBtn">
           <span>過去のルーティン</span><span class="chev" id="archiveCount">›</span>
         </button>
@@ -412,7 +421,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '1.4.2';
+  const APP_VERSION = '1.4.3';
   function renderVersionLabel() {
     const el = document.getElementById('versionLabel');
     if (el) el.textContent = 'まいまい v' + APP_VERSION;
@@ -814,11 +823,21 @@
   const MORNING_START = 4;   // 朝モードの開始時刻
   const MORNING_END = 10;    // この時刻以降は出ない
   const MORNING_DISMISS_KEY = 'maimai.morningDismissed';
+  const MORNING_ENABLED_KEY = 'maimai.morningEnabled';
+
+  function morningEnabled() { return localStorage.getItem(MORNING_ENABLED_KEY) !== 'off'; } // 既定オン
+  function setMorningEnabled(on) {
+    localStorage.setItem(MORNING_ENABLED_KEY, on ? 'on' : 'off');
+    $('#morningModeSwitch').classList.toggle('on', on);
+  }
+  $('#morningModeSwitch').addEventListener('click', () => setMorningEnabled(!morningEnabled()));
+  function syncSettingsUI() { $('#morningModeSwitch').classList.toggle('on', morningEnabled()); }
 
   function morningItems() {
     return activeItems().filter((i) => i.freq === 'daily' && i.morning).sort(byOrder);
   }
   function shouldShowMorning() {
+    if (!morningEnabled()) return false;
     const h = new Date().getHours();
     if (h < MORNING_START || h >= MORNING_END) return false;
     const items = morningItems();
@@ -863,7 +882,7 @@
     hideToast();  // 画面が変わったらトーストは即消す
     $$('.view').forEach((v) => v.classList.toggle('active', v.id === id));
   }
-  $('#settingsBtn').addEventListener('click', () => { renderArchiveCount(); showView('settingsView'); });
+  $('#settingsBtn').addEventListener('click', () => { renderArchiveCount(); syncSettingsUI(); showView('settingsView'); });
   $('#settingsBackBtn').addEventListener('click', () => showView('mainView'));
   $('#archiveOpenBtn').addEventListener('click', () => { renderArchive(); showView('archiveView'); });
   $('#archiveBackBtn').addEventListener('click', () => { renderArchiveCount(); showView('settingsView'); });
