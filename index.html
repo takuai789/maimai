@@ -73,6 +73,17 @@
     display: flex; justify-content: space-between; align-items: baseline;
   }
   .progress-line .count { font-weight: 600; color: var(--green); }
+  .reminder-wrap { display: flex; flex-direction: column; gap: 8px; padding: 2px 0 14px; }
+  .reminder {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    background: #FFF4E5; border: 0.5px solid rgba(217,119,6,0.28); border-radius: 12px;
+    padding: 12px 14px; font-family: inherit; font-size: 14px; color: #9A5B00;
+    cursor: pointer; text-align: left;
+  }
+  .reminder .rm-ico { display: flex; color: #D97706; flex-shrink: 0; }
+  .reminder .rm-text { flex: 1; }
+  .reminder .rm-text b { font-weight: 700; }
+  .reminder .rm-chev { color: rgba(154,91,0,0.5); font-size: 18px; flex-shrink: 0; }
   .section-header {
     font-size: 13px; font-weight: 600; color: var(--secondary);
     padding: 18px 4px 6px; display: flex; justify-content: space-between; align-items: baseline;
@@ -428,7 +439,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '1.5.0';
+  const APP_VERSION = '1.6.0';
   function renderVersionLabel() {
     const el = document.getElementById('versionLabel');
     if (el) el.textContent = 'まいまい v' + APP_VERSION;
@@ -498,6 +509,44 @@
     '</div>';
   }
 
+  // ---------- 残件リマインド（毎週=土日 / 毎月=残り7日） ----------
+  function weekRemindDue(d = new Date()) {
+    const day = d.getDay();        // 0=日, 6=土
+    return day === 0 || day === 6; // 土日
+  }
+  function monthRemindDue(d = new Date()) {
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    return (lastDay - d.getDate()) <= 6; // 残り7日以内（末日含む）
+  }
+  function pendingCount(freq) {
+    return orderedItems(freq).filter((i) => !isDone(i)).length;
+  }
+  function renderReminders(scroll) {
+    const rows = [];
+    if (weekRemindDue()) {
+      const n = pendingCount('weekly');
+      if (n > 0) rows.push({ tab: 'weekly', label: '今週', n });
+    }
+    if (monthRemindDue()) {
+      const n = pendingCount('monthly');
+      if (n > 0) rows.push({ tab: 'monthly', label: '今月', n });
+    }
+    if (rows.length === 0) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'reminder-wrap';
+    for (const r of rows) {
+      const b = document.createElement('button');
+      b.className = 'reminder';
+      b.dataset.tab = r.tab;
+      b.innerHTML =
+        '<span class="rm-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></span>' +
+        '<span class="rm-text">' + r.label + 'の残り <b>' + r.n + '件</b></span>' +
+        '<span class="rm-chev">›</span>';
+      wrap.appendChild(b);
+    }
+    scroll.appendChild(wrap);
+  }
+
   function renderList() {
     $('#navTitle').textContent = state.reordering ? '並べ替え' : TAB_TITLE[state.tab];
     if (typeof updateReorderUI === 'function') updateReorderUI();
@@ -507,6 +556,9 @@
 
     const freqsToShow = state.tab === 'all' ? FREQS : [state.tab];
     let totalRendered = 0;
+
+    // 毎日タブの先頭に、毎週/毎月の残件リマインド（後半だけ）
+    if (state.tab === 'daily' && !state.reordering) renderReminders(scroll);
 
     function makeGroup(items) {
       const group = document.createElement('div');
@@ -601,6 +653,9 @@
 
   $('#listScroll').addEventListener('click', async (e) => {
     if (state.reordering) return;  // 並べ替え中はタップでチェックしない
+    // 残件リマインドのタップ → 該当タブへ
+    const rm = e.target.closest('.reminder');
+    if (rm) { setTab(rm.dataset.tab); return; }
     // 右端の編集「›」
     const chev = e.target.closest('.edit-chev');
     if (chev) {
