@@ -129,6 +129,17 @@
     line-height: 1.8;
   }
 
+  /* ---- テーマカラー ---- */
+  .theme-swatches { display: flex; gap: 14px; }
+  .swatch {
+    width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+    border: 3px solid transparent; box-sizing: border-box; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; color: #fff;
+  }
+  .swatch.sel { border-color: var(--ink); }
+  .swatch svg { opacity: 0; }
+  .swatch.sel svg { opacity: 1; }
+
   /* ---- 朝トグル（編集シート） ---- */
   .toggle-row {
     display: flex; align-items: center; justify-content: space-between;
@@ -269,7 +280,7 @@
     display: flex; align-items: center; justify-content: center; gap: 8px;
     background: var(--green); color: #fff; border: 0; border-radius: 14px;
     padding: 14px 18px; font-family: inherit; font-size: 14px; font-weight: 600;
-    box-shadow: 0 8px 28px rgba(15,169,104,0.4); cursor: pointer;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.28); cursor: pointer;
     transform: translateY(140%); transition: transform 0.35s cubic-bezier(.32,.72,0,1);
   }
   #updateBanner.show { transform: translateY(0); }
@@ -326,6 +337,12 @@
       <span style="width:36px;"></span>
     </div>
     <div class="settings-scroll">
+      <div class="settings-group">
+        <div class="settings-row" style="cursor:default; flex-direction:column; align-items:stretch; gap:10px;">
+          <span>テーマカラー</span>
+          <div class="theme-swatches" id="themeSwatches"></div>
+        </div>
+      </div>
       <div class="settings-group">
         <div class="settings-row" id="morningModeRow" style="cursor:pointer;">
           <span>朝モードで起動する</span>
@@ -449,7 +466,55 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '1.7.2';
+  const APP_VERSION = '1.8.0';
+  // ---------- テーマカラー ----------
+  const THEMES = {
+    green:  '#0FA968',
+    pink:   '#E0218A',
+    blue:   '#0A84FF',
+    purple: '#8E44EC',
+    orange: '#F5820D',
+  };
+  const THEME_KEY = 'maimai.theme';
+  function hexToRgba(hex, a) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+  }
+  function currentTheme() {
+    const t = localStorage.getItem(THEME_KEY);
+    return THEMES[t] ? t : 'green';
+  }
+  function applyTheme(name) {
+    const main = THEMES[name] || THEMES.green;
+    const root = document.documentElement;
+    root.style.setProperty('--green', main);
+    root.style.setProperty('--green-soft', hexToRgba(main, 0.12));
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', main);
+  }
+  function renderThemeSwatches() {
+    const wrap = $('#themeSwatches');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const cur = currentTheme();
+    for (const [name, color] of Object.entries(THEMES)) {
+      const b = document.createElement('div');
+      b.className = 'swatch' + (name === cur ? ' sel' : '');
+      b.style.background = color;
+      b.dataset.theme = name;
+      b.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+      wrap.appendChild(b);
+    }
+  }
+  document.addEventListener('click', (e) => {
+    const sw = e.target.closest('.swatch');
+    if (!sw) return;
+    localStorage.setItem(THEME_KEY, sw.dataset.theme);
+    applyTheme(sw.dataset.theme);
+    renderThemeSwatches();
+  });
+
   function renderVersionLabel() {
     const el = document.getElementById('versionLabel');
     if (el) el.textContent = 'まいまい v' + APP_VERSION;
@@ -1003,7 +1068,7 @@
     hideToast();  // 画面が変わったらトーストは即消す
     $$('.view').forEach((v) => v.classList.toggle('active', v.id === id));
   }
-  $('#settingsBtn').addEventListener('click', () => { renderArchiveCount(); syncSettingsUI(); showView('settingsView'); });
+  $('#settingsBtn').addEventListener('click', () => { renderArchiveCount(); syncSettingsUI(); renderThemeSwatches(); showView('settingsView'); });
   $('#settingsBackBtn').addEventListener('click', () => showView('mainView'));
   $('#archiveOpenBtn').addEventListener('click', () => { renderArchive(); showView('archiveView'); });
   $('#archiveBackBtn').addEventListener('click', () => { renderArchiveCount(); showView('settingsView'); });
@@ -1101,6 +1166,7 @@
 
   // ---------- 起動 ----------
   (async function init() {
+    applyTheme(currentTheme());
     setupViewportTracking();
     await openDB();
     await loadAll();
