@@ -342,6 +342,13 @@
           <span>テーマカラー</span>
           <div class="theme-swatches" id="themeSwatches"></div>
         </div>
+        <div class="settings-row" style="cursor:default; flex-direction:column; align-items:stretch; gap:10px;">
+          <span>チェックの操作</span>
+          <div class="segmented" id="tapSeg" style="margin-bottom:0;">
+            <button data-tap="single">ワンタップ</button>
+            <button data-tap="double">ダブルタップ</button>
+          </div>
+        </div>
       </div>
       <div class="settings-group">
         <div class="settings-row" id="morningModeRow" style="cursor:pointer;">
@@ -354,6 +361,7 @@
         </div>
       </div>
       <div class="settings-note">
+        ダブルタップにすると、素早く2回タップしたときだけチェックが入ります（誤タップ防止）。<br>
         朝（4〜10時）・夜（20〜24時）にアプリを開くと、その時間帯のルーティンだけの画面で起動します。
       </div>
       <div class="settings-group">
@@ -466,7 +474,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '1.8.0';
+  const APP_VERSION = '1.9.1';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -514,6 +522,31 @@
     applyTheme(sw.dataset.theme);
     renderThemeSwatches();
   });
+
+  // ---------- チェックの操作（ワンタップ / ダブルタップ） ----------
+  const TAP_KEY = 'maimai.tapMode';
+  function tapMode() { return localStorage.getItem(TAP_KEY) === 'double' ? 'double' : 'single'; }
+  function setTapMode(m) {
+    localStorage.setItem(TAP_KEY, m);
+    syncSettingsUI();
+  }
+  // 触覚フィードバック（対応端末のみ。iOSは無視されることがあるが害はない）
+  function haptic(ms) { if (navigator.vibrate) navigator.vibrate(ms); }
+
+  // ダブルタップ判定を挟んでチェックを実行
+  const DOUBLE_MS = 320;
+  let lastTap = { id: null, t: 0 };
+  async function requestToggle(item, rerender) {
+    if (tapMode() === 'single') { await toggleItem(item, rerender); return; }
+    const now = Date.now();
+    if (lastTap.id === item.id && now - lastTap.t < DOUBLE_MS) {
+      lastTap = { id: null, t: 0 };
+      await toggleItem(item, rerender);
+    } else {
+      lastTap = { id: item.id, t: now };
+      haptic(6);   // 1回目: 受け付けた合図
+    }
+  }
 
   function renderVersionLabel() {
     const el = document.getElementById('versionLabel');
@@ -685,8 +718,10 @@
 
   // ---------- 行操作 ----------
   async function toggleItem(item, rerender) {
-    item.donePeriod = isDone(item) ? null : periodKey(item.freq);
+    const willComplete = !isDone(item);
+    item.donePeriod = willComplete ? periodKey(item.freq) : null;
     item.updatedAt = Date.now();
+    haptic(willComplete ? 14 : 8);   // 完了はしっかり、解除は控えめ
     await put('items', item);
     rerender();
   }
@@ -766,7 +801,7 @@
     if (suppressClick) return;            // スワイプ直後のタップは無視
     if (swipedRow) { closeSwipedRow(); return; }  // 開いてる行を閉じるだけ
     const item = state.items.find((i) => i.id === row.dataset.id);
-    if (item) await toggleItem(item, renderList);
+    if (item) await requestToggle(item, renderList);
   });
 
   // ---------- スワイプ（左スワイプで編集／やめる） ----------
@@ -839,7 +874,7 @@
     const group = wrap.parentElement;
     const wraps = Array.from(group.children);
     e.preventDefault();
-    if (navigator.vibrate) navigator.vibrate(8);
+    haptic(8);
     drag = {
       wrap, group, wraps,
       startY: e.touches[0].clientY,
@@ -1002,7 +1037,12 @@
   function syncSettingsUI() {
     $('#morningModeSwitch').classList.toggle('on', modeEnabled('morning'));
     $('#nightModeSwitch').classList.toggle('on', modeEnabled('night'));
+    $$('#tapSeg button').forEach((b) => b.classList.toggle('active', b.dataset.tap === tapMode()));
   }
+  $('#tapSeg').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-tap]');
+    if (btn) setTapMode(btn.dataset.tap);
+  });
 
   function slotItems(slot) {
     return activeItems().filter((i) => i.freq === 'daily' && i.slot === slot).sort(byOrder);
@@ -1055,7 +1095,7 @@
     const row = e.target.closest('.routine-row');
     if (!row) return;
     const item = state.items.find((i) => i.id === row.dataset.id);
-    if (item) await toggleItem(item, renderMorning);
+    if (item) await requestToggle(item, renderMorning);
   });
   $('#morningExitBtn').addEventListener('click', () => {
     localStorage.setItem(SLOT_MODES[currentSlotMode].dismissKey, periodKey('daily'));
