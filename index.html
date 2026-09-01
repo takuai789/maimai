@@ -6,12 +6,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-<meta name="apple-mobile-web-app-title" content="まいまい" />
+<meta name="apple-mobile-web-app-title" content="AURORA" />
 <meta name="theme-color" content="#0FA968" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="apple-touch-icon" href="icon-192.png" />
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23FFA7CC'/%3E%3Cstop offset='1' stop-color='%23FF4D94'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Cpath d='M0 0 L64 0 L64 64 Z' fill='%23141A2E'/%3E%3Ccircle cx='22' cy='43' r='9' fill='white'/%3E%3Cg stroke='white' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M22 29v-4M22 57v4M8 43H4M36 43h4M12 33l-3-3M32 53l3 3M12 53l-3 3M32 33l3-3'/%3E%3C/g%3E%3Cpath d='M44 10 a10.5 10.5 0 1 0 10 14 a8.5 8.5 0 1 1 -10 -14z' fill='%23FF4D94'/%3E%3C/svg%3E" />
-<title>まいまい</title>
+<title>AURORA</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -474,7 +474,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '1.9.1';
+  const APP_VERSION = '2.0.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -550,7 +550,7 @@
 
   function renderVersionLabel() {
     const el = document.getElementById('versionLabel');
-    if (el) el.textContent = 'まいまい v' + APP_VERSION;
+    if (el) el.textContent = 'AURORA v' + APP_VERSION;
   }
 
   // ---------- 期間キー ----------
@@ -634,6 +634,19 @@
     const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
     return (lastDay - d.getDate()) <= 6; // 残り7日以内（末日含む）
   }
+  // ---------- アプリアイコンのバッジ（未完了件数） ----------
+  // Badging API。現時点のiOS Safari/PWAは未対応で何も起きないが、
+  // 将来対応された時点でそのまま有効になる。対応環境（Android等）では今すぐ効く。
+  async function updateBadge() {
+    if (!('setAppBadge' in navigator)) return;
+    try {
+      // 「今日やること」の残り = 毎日の未完了。0なら消す。
+      const n = activeItems().filter((i) => i.freq === 'daily' && !isDone(i)).length;
+      if (n > 0) await navigator.setAppBadge(n);
+      else if ('clearAppBadge' in navigator) await navigator.clearAppBadge();
+    } catch (e) { /* 権限なし等は黙って無視 */ }
+  }
+
   function pendingCount(freq) {
     return orderedItems(freq).filter((i) => !isDone(i)).length;
   }
@@ -664,6 +677,7 @@
   }
 
   function renderList() {
+    updateBadge();
     $('#navTitle').textContent = state.reordering ? '並べ替え' : TAB_TITLE[state.tab];
     if (typeof updateReorderUI === 'function') updateReorderUI();
     const scroll = $('#listScroll');
@@ -1069,6 +1083,7 @@
   let currentSlotMode = 'morning';
   function renderMorning() { renderSlotView(currentSlotMode); }
   function renderSlotView(slot) {
+    updateBadge();
     currentSlotMode = slot;
     const m = SLOT_MODES[slot];
     $('#morningView').classList.toggle('night', slot === 'night');
@@ -1189,7 +1204,7 @@
     if (!file) return;
     try {
       const data = JSON.parse(await file.text());
-      if (data.schema !== SCHEMA) { alert('まいまいのデータではないようです'); return; }
+      if (data.schema !== SCHEMA) { alert('AURORAのデータではないようです'); return; }
       const localById = new Map(state.items.map((n) => [n.id, n]));
       for (const it of (data.items || [])) {
         const local = localById.get(it.id);

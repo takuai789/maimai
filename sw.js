@@ -1,11 +1,11 @@
-// まいまい Service Worker
+// AURORA Service Worker
 // 自動アップデート対応版。
 // - HTML/JS本体（index.html）はネットワーク優先で常に最新を取りに行く
 // - 取得失敗時（オフライン）はキャッシュにフォールバック
 // - アイコン等の静的アセットはキャッシュ優先（速さ重視）
 // CACHE の数字を上げるたびに「新しいバージョン」として検知される。
 // リリース時は index.html の APP_VERSION と必ずセットで上げること。
-const CACHE = 'maimai-v1-9-1';
+const CACHE = 'maimai-v2-0-0';
 const ASSETS = [
   './',
   './index.html',
