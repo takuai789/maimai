@@ -370,6 +370,17 @@
         </button>
       </div>
       <div class="settings-group">
+        <div class="settings-row" id="backupFolderRow" style="cursor:pointer;">
+          <span>バックアップ先フォルダ</span><span class="chev" id="backupFolder">未設定 ›</span>
+        </div>
+        <div class="settings-row" id="backupNowRow" style="cursor:pointer;">
+          <span>今すぐバックアップ</span><span class="chev" id="backupLast">まだなし</span>
+        </div>
+      </div>
+      <div class="settings-note">
+        フォルダを選んでおくと、週に1回アプリを開いたときに自動で書き出します（Mac の Chrome / Edge）。iCloud Drive 内を選べば他の端末からも見られます。それ以外のブラウザでは、7日経つと毎日タブに催促が出ます。
+      </div>
+      <div class="settings-group">
         <button class="settings-row" id="exportBtn">
           <span>データを書き出す（JSON）</span><span class="chev">›</span>
         </button>
@@ -445,8 +456,8 @@
 
   // ---------- IndexedDB ----------
   const DB_NAME = 'maimai-db';
-  const DB_VERSION = 1;
-  const STORES = ['items'];
+  const DB_VERSION = 2;
+  const STORES = ['items', 'meta'];
   let _db = null;
 
   function openDB() {
@@ -466,6 +477,9 @@
   function getAll(store) {
     return new Promise((res, rej) => { const r = tx(store).getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
   }
+  function getOne(store, id) {
+    return new Promise((res, rej) => { const r = tx(store).get(id); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  }
   function put(store, val) {
     return new Promise((res, rej) => { const r = tx(store, 'readwrite').put(val); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
   }
@@ -474,7 +488,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.0.0';
+  const APP_VERSION = '2.1.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -652,6 +666,7 @@
   }
   function renderReminders(scroll) {
     const rows = [];
+    if (backupDue()) rows.push({ act: 'backup', label: 'バックアップ' });
     if (weekRemindDue()) {
       const n = pendingCount('weekly');
       if (n > 0) rows.push({ tab: 'weekly', label: '今週', n });
@@ -666,6 +681,15 @@
     for (const r of rows) {
       const b = document.createElement('button');
       b.className = 'reminder';
+      if (r.act) {
+        b.dataset.act = r.act;
+        b.innerHTML =
+          '<span class="rm-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg></span>' +
+          '<span class="rm-text">データをバックアップしましょう</span>' +
+          '<span class="rm-chev">›</span>';
+        wrap.appendChild(b);
+        continue;
+      }
       b.dataset.tab = r.tab;
       b.innerHTML =
         '<span class="rm-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></span>' +
@@ -787,7 +811,10 @@
     if (state.reordering) return;  // 並べ替え中はタップでチェックしない
     // 残件リマインドのタップ → 該当タブへ
     const rm = e.target.closest('.reminder');
-    if (rm) { setTab(rm.dataset.tab); return; }
+    if (rm) {
+      if (rm.dataset.act === 'backup') { await runBackupFromGesture(); return; }
+      setTab(rm.dataset.tab); return;
+    }
     // 右端の編集「›」
     const chev = e.target.closest('.edit-chev');
     if (chev) {
@@ -1123,7 +1150,7 @@
     hideToast();  // 画面が変わったらトーストは即消す
     $$('.view').forEach((v) => v.classList.toggle('active', v.id === id));
   }
-  $('#settingsBtn').addEventListener('click', () => { renderArchiveCount(); syncSettingsUI(); renderThemeSwatches(); showView('settingsView'); });
+  $('#settingsBtn').addEventListener('click', () => { renderArchiveCount(); syncSettingsUI(); renderThemeSwatches(); renderBackupSettings(); showView('settingsView'); });
   $('#settingsBackBtn').addEventListener('click', () => showView('mainView'));
   $('#archiveOpenBtn').addEventListener('click', () => { renderArchive(); showView('archiveView'); });
   $('#archiveBackBtn').addEventListener('click', () => { renderArchiveCount(); showView('settingsView'); });
@@ -1187,6 +1214,116 @@
     }
   });
 
+  // ---------- 週次バックアップ ----------
+  // File System Access API（Mac の Chrome / Edge）でフォルダを一度選んでおくと、
+  // 以後は起動時に自動で書き出す。非対応（Safari 等）では催促バナー → ダウンロード。
+  const BACKUP_INTERVAL_DAYS = 7;
+  const BACKUP_LAST_KEY = 'maimai.lastBackupAt';
+  const BACKUP_META_ID = 'backupDir';
+  const fsSupported = () => typeof window.showDirectoryPicker === 'function';
+
+  function lastBackupAt() { return Number(localStorage.getItem(BACKUP_LAST_KEY) || 0); }
+  function markBackupDone() { localStorage.setItem(BACKUP_LAST_KEY, String(Date.now())); }
+  function backupDue() {
+    const last = lastBackupAt();
+    if (!last) return true;
+    return Date.now() - last >= BACKUP_INTERVAL_DAYS * 86400000;
+  }
+  function backupData() {
+    return { schema: SCHEMA, exportedAt: new Date().toISOString(), items: state.items };
+  }
+  function backupFileName() {
+    const d = new Date();
+    return 'maimai-backup-' + d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + '.json';
+  }
+
+  async function getDirHandle() {
+    try { const rec = await getOne('meta', BACKUP_META_ID); return rec ? rec.handle : null; }
+    catch (e) { return null; }
+  }
+  async function dirPermission(handle, request) {
+    if (!handle) return 'denied';
+    try {
+      const opts = { mode: 'readwrite' };
+      let st = await handle.queryPermission(opts);
+      if (st !== 'granted' && request) st = await handle.requestPermission(opts);
+      return st;
+    } catch (e) { return 'denied'; }
+  }
+  // フォルダを選ぶ（ユーザー操作から呼ぶこと）
+  async function chooseBackupFolder() {
+    if (!fsSupported()) return false;
+    try {
+      const handle = await window.showDirectoryPicker({ id: 'maimai-backup', mode: 'readwrite' });
+      await put('meta', { id: BACKUP_META_ID, handle, name: handle.name });
+      return true;
+    } catch (e) { return false; }  // キャンセル
+  }
+  // 選んだフォルダへ書き出し
+  async function writeBackupToFolder(request) {
+    const handle = await getDirHandle();
+    if (!handle) return false;
+    if (await dirPermission(handle, request) !== 'granted') return false;
+    try {
+      const fh = await handle.getFileHandle(backupFileName(), { create: true });
+      const w = await fh.createWritable();
+      await w.write(JSON.stringify(backupData(), null, 2));
+      await w.close();
+      markBackupDone();
+      return true;
+    } catch (e) { return false; }
+  }
+  // ダウンロードで書き出し（フォルダ未設定・非対応環境のフォールバック）
+  function downloadBackup(name) {
+    const blob = new Blob([JSON.stringify(backupData(), null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name || backupFileName();
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  // 起動時の自動バックアップ（権限が既に許可済みのときだけ静かに実行）
+  async function maybeAutoBackup() {
+    if (!backupDue() || !fsSupported()) return;
+    const handle = await getDirHandle();
+    if (!handle) return;
+    if (await dirPermission(handle, false) !== 'granted') return;  // 要操作なら催促バナーに任せる
+    if (await writeBackupToFolder(false)) { renderBackupSettings(); renderList(); }
+  }
+  // 催促バナーから実行（ユーザー操作あり）
+  async function runBackupFromGesture() {
+    let ok = false;
+    if (fsSupported() && await getDirHandle()) ok = await writeBackupToFolder(true);
+    if (!ok && fsSupported() && !(await getDirHandle())) {
+      if (await chooseBackupFolder()) ok = await writeBackupToFolder(true);
+    }
+    if (!ok) { downloadBackup(); markBackupDone(); ok = true; }  // 非対応・拒否時はダウンロード
+    renderBackupSettings();
+    renderList();
+    showToast('バックアップしました');
+  }
+
+  // 設定画面の表示更新
+  async function renderBackupSettings() {
+    const folderEl = $('#backupFolder'); if (!folderEl) return;
+    const rowEl = $('#backupFolderRow');
+    if (!fsSupported()) {
+      rowEl.style.display = 'none';
+    } else {
+      rowEl.style.display = '';
+      const rec = await (async () => { try { return await getOne('meta', BACKUP_META_ID); } catch (e) { return null; } })();
+      folderEl.textContent = rec && rec.name ? rec.name + ' ›' : '未設定 ›';
+    }
+    const last = lastBackupAt();
+    $('#backupLast').textContent = last
+      ? new Date(last).toLocaleDateString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric' })
+      : 'まだなし';
+  }
+  $('#backupFolderRow').addEventListener('click', async () => {
+    if (await chooseBackupFolder()) { await writeBackupToFolder(true); renderBackupSettings(); renderList(); }
+  });
+  $('#backupNowRow').addEventListener('click', () => runBackupFromGesture());
+
   // ---------- JSON 書き出し/取り込み ----------
   const SCHEMA = 'maimai.v1';
   $('#exportBtn').addEventListener('click', () => {
@@ -1232,6 +1369,7 @@
       renderSlotView(mode);
       showView('morningView');
     }
+    maybeAutoBackup();
   })();
 
   // 日付が変わった後にアプリへ戻ったとき、完了状態を最新の期間で描き直す
