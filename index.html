@@ -377,9 +377,7 @@
           <span>今すぐバックアップ</span><span class="chev" id="backupLast">まだなし</span>
         </div>
       </div>
-      <div class="settings-note">
-        フォルダを選んでおくと、週に1回アプリを開いたときに自動で書き出します（Mac の Chrome / Edge）。iCloud Drive 内を選べば他の端末からも見られます。それ以外のブラウザでは、7日経つと毎日タブに催促が出ます。
-      </div>
+      <div class="settings-note" id="backupNote"></div>
       <div class="settings-group">
         <button class="settings-row" id="exportBtn">
           <span>データを書き出す（JSON）</span><span class="chev">›</span>
@@ -488,7 +486,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.1.0';
+  const APP_VERSION = '2.2.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -1282,6 +1280,26 @@
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
+  // iOS など：共有シートで保存先（iCloud Drive の任意フォルダ等）を選んで保存
+  function shareSupported() {
+    try {
+      if (!navigator.canShare || !navigator.share) return false;
+      const f = new File(['{}'], 'test.json', { type: 'application/json' });
+      return navigator.canShare({ files: [f] });
+    } catch (e) { return false; }
+  }
+  // 戻り値: 'ok' | 'cancel' | 'fail'
+  async function shareBackup() {
+    try {
+      const file = new File([JSON.stringify(backupData(), null, 2)], backupFileName(), { type: 'application/json' });
+      if (!navigator.canShare({ files: [file] })) return 'fail';
+      await navigator.share({ files: [file], title: 'AURORA バックアップ' });
+      return 'ok';
+    } catch (e) {
+      return (e && e.name === 'AbortError') ? 'cancel' : 'fail';
+    }
+  }
+
   // 起動時の自動バックアップ（権限が既に許可済みのときだけ静かに実行）
   async function maybeAutoBackup() {
     if (!backupDue() || !fsSupported()) return;
@@ -1293,11 +1311,19 @@
   // 催促バナーから実行（ユーザー操作あり）
   async function runBackupFromGesture() {
     let ok = false;
+    // ① フォルダ指定済み（Mac の Chrome / Edge）なら、そこへ直接書き出し
     if (fsSupported() && await getDirHandle()) ok = await writeBackupToFolder(true);
     if (!ok && fsSupported() && !(await getDirHandle())) {
       if (await chooseBackupFolder()) ok = await writeBackupToFolder(true);
     }
-    if (!ok) { downloadBackup(); markBackupDone(); ok = true; }  // 非対応・拒否時はダウンロード
+    // ② iPhone など：共有シートから保存先を選ぶ
+    if (!ok && shareSupported()) {
+      const r = await shareBackup();
+      if (r === 'cancel') return;           // 自分でやめたので何も変えない
+      if (r === 'ok') { markBackupDone(); ok = true; }
+    }
+    // ③ 最後の手段：ダウンロード
+    if (!ok) { downloadBackup(); markBackupDone(); ok = true; }
     renderBackupSettings();
     renderList();
     showToast('バックアップしました');
@@ -1318,6 +1344,16 @@
     $('#backupLast').textContent = last
       ? new Date(last).toLocaleDateString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric' })
       : 'まだなし';
+    const note = $('#backupNote');
+    if (note) {
+      if (fsSupported()) {
+        note.innerHTML = 'フォルダを選んでおくと、週に1回アプリを開いたときに自動で書き出します。iCloud Drive 内を選べば他の端末からも見られます。';
+      } else if (shareSupported()) {
+        note.innerHTML = '7日ごとに毎日タブへ催促が出ます。タップすると共有シートが開くので「ファイルに保存」→ iCloud Drive の好きなフォルダを選んでください。保存先は次回も同じ場所が初期表示されます。';
+      } else {
+        note.innerHTML = '7日ごとに毎日タブへ催促が出ます。タップするとファイルがダウンロードされます。';
+      }
+    }
   }
   $('#backupFolderRow').addEventListener('click', async () => {
     if (await chooseBackupFolder()) { await writeBackupToFolder(true); renderBackupSettings(); renderList(); }
