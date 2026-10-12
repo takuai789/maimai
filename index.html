@@ -140,6 +140,47 @@
   .swatch svg { opacity: 0; }
   .swatch.sel svg { opacity: 1; }
 
+  /* ---- 締め切り月の選択 ---- */
+  .month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .month-grid button {
+    border: 0; border-radius: 10px; background: var(--card); color: var(--ink);
+    font-family: inherit; font-size: 14px; font-weight: 500; padding: 10px 0; cursor: pointer;
+  }
+  .month-grid button.active { background: var(--green); color: #fff; font-weight: 700; }
+
+  /* ---- 期限バッジ（毎年タブ） ---- */
+  .due-badge {
+    flex-shrink: 0; margin-left: 8px; font-size: 12px; font-weight: 600;
+    padding: 3px 9px; border-radius: 999px;
+    background: rgba(118,118,128,0.14); color: var(--secondary);
+  }
+  .due-badge.soon { background: rgba(217,119,6,0.14); color: #B45309; }
+  .due-badge.over { background: rgba(255,59,48,0.12); color: var(--red); }
+  .routine-row.done .due-badge { opacity: 0.4; }
+  .oneoff-badge {
+    flex-shrink: 0; margin-left: 8px; font-size: 11px; font-weight: 600;
+    padding: 2px 7px; border-radius: 999px;
+    border: 1px solid var(--tertiary); color: var(--secondary);
+  }
+
+  /* ---- 期限日（単発） ---- */
+  .date-input {
+    width: 100%; font-family: inherit; font-size: 16px; color: var(--ink);
+    padding: 12px 14px; border: 0; border-radius: 12px; background: var(--card);
+    outline: none; -webkit-appearance: none; appearance: none; min-height: 46px;
+  }
+  .date-input.err { box-shadow: 0 0 0 2px var(--red) inset; }
+  .date-pair { display: flex; gap: 10px; }
+  .date-field { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .date-cap { font-size: 13px; color: var(--secondary); padding: 0 4px; }
+  .date-hint { font-size: 12px; color: var(--secondary); padding: 8px 4px 0; line-height: 1.6; }
+  /* 単発: タイトルの下に締切 */
+  .routine-row .label-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .routine-row .label-col .label { flex: none; }
+  .routine-row .sub { font-size: 12px; color: var(--secondary); white-space: nowrap; }
+  /* 5タブでもラベルが詰まらないように */
+  .tabbar button .tab-label { white-space: nowrap; }
+
   /* ---- 朝トグル（編集シート） ---- */
   .toggle-row {
     display: flex; align-items: center; justify-content: space-between;
@@ -320,9 +361,13 @@
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4M8 13h2M14 13h2M8 17h2M14 17h2"/></svg>
         <span class="tab-label">毎月</span>
       </button>
-      <button data-tab="all">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
-        <span class="tab-label">すべて</span>
+      <button data-tab="yearly">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2.5"/></svg>
+        <span class="tab-label">毎年</span>
+      </button>
+      <button data-tab="once">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>
+        <span class="tab-label">単発</span>
       </button>
     </div>
   </div>
@@ -433,6 +478,8 @@
     <button data-freq="daily">毎日</button>
     <button data-freq="weekly">毎週</button>
     <button data-freq="monthly">毎月</button>
+    <button data-freq="yearly">毎年</button>
+    <button data-freq="once">単発</button>
   </div>
   <div id="slotSegWrap" style="margin-bottom:16px;">
     <div style="font-size:13px; color:var(--secondary); padding:0 4px 6px;">時間帯</div>
@@ -440,6 +487,30 @@
       <button data-slot="">なし</button>
       <button data-slot="morning">☀️ 朝</button>
       <button data-slot="night">🌙 夜</button>
+    </div>
+  </div>
+  <div id="dueSegWrap" style="margin-bottom:16px; display:none;">
+    <div style="font-size:13px; color:var(--secondary); padding:0 4px 6px;">締め切りの月</div>
+    <div class="month-grid" id="dueGrid"></div>
+  </div>
+  <div id="dateWrap" style="margin-bottom:16px; display:none;">
+    <div class="date-pair">
+      <label class="date-field">
+        <span class="date-cap">締切日</span>
+        <input type="date" id="dateInput" class="date-input" />
+      </label>
+      <label class="date-field">
+        <span class="date-cap">目標日</span>
+        <input type="date" id="targetInput" class="date-input" />
+      </label>
+    </div>
+    <div id="dateError" style="display:none; font-size:12px; color:var(--red); padding:6px 4px 0;"></div>
+    <div class="date-hint">目標日は締切日と同じになります。前倒ししたいときだけ変えてください。</div>
+  </div>
+  <div id="lateWrap" style="margin-bottom:16px; display:none;">
+    <div class="toggle-row" id="lateRow" style="margin:0;">
+      <span>月の中盤以降にやる<span style="display:block; font-size:12px; color:var(--secondary);">リストの下の方に並ぶ</span></span>
+      <div class="switch" id="lateSwitch"></div>
     </div>
   </div>
   <button class="primary-btn" id="saveBtn">保存</button>
@@ -486,7 +557,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.2.0';
+  const APP_VERSION = '2.8.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -580,15 +651,18 @@
   function periodKey(freq, d = new Date()) {
     if (freq === 'daily') return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
     if (freq === 'weekly') return isoWeekKey(d);
+    if (freq === 'yearly') return String(d.getFullYear());
+    if (freq === 'once') return 'once';   // 単発は期間なし（完了したら過去へ移る）
     return d.getFullYear() + '-' + pad(d.getMonth() + 1);
   }
   function isDone(item) { return item.donePeriod === periodKey(item.freq); }
 
   // ---------- State ----------
-  const FREQS = ['daily', 'weekly', 'monthly'];
-  const FREQ_LABEL = { daily: '毎日', weekly: '毎週', monthly: '毎月' };
-  const TAB_TITLE = { daily: '毎日', weekly: '毎週', monthly: '毎月', all: 'すべて' };
-  const state = { items: [], tab: 'daily', editingId: null, sheetFreq: 'daily', sheetSlot: '', reordering: false };
+  const FREQS = ['daily', 'weekly', 'monthly', 'yearly', 'once'];
+  const FREQ_LABEL = { daily: '毎日', weekly: '毎週', monthly: '毎月', yearly: '毎年', once: '単発' };
+  const TAB_TITLE = FREQ_LABEL;
+  const PERIOD_NAME = { daily: '今日', weekly: '今週', monthly: '今月', yearly: '今年', once: '' };
+  const state = { items: [], tab: 'daily', editingId: null, sheetFreq: 'daily', sheetSlot: '', sheetDue: null, sheetLate: false, reordering: false };
 
   async function loadAll() {
     state.items = await getAll('items');
@@ -597,6 +671,14 @@
       let dirty = false;
       if (typeof it.order !== 'number') { it.order = it.createdAt || 0; dirty = true; }
       if (it.morning && !it.slot) { it.slot = 'morning'; dirty = true; }  // 旧データ移行
+      // v2.7.0: 毎年の「一回だけ」は単発タブへ。期限は締め切り月の末日（未設定なら12/31）
+      if (it.freq === 'yearly' && it.oneOff && !it.archivedAt) {
+        const y = new Date().getFullYear();
+        const m = it.dueMonth || 12;
+        it.dueDate = y + '-' + pad(m) + '-' + pad(new Date(y, m, 0).getDate());
+        it.freq = 'once'; it.oneOff = false; it.dueMonth = null; it.donePeriod = null;
+        dirty = true;
+      }
       if (dirty) await put('items', it);
     }
   }
@@ -604,7 +686,64 @@
   // 時間帯: 'morning' | 'night' | null。朝→無指定→夜の順に並ぶ
   function slotRank(i) { return i.slot === 'morning' ? 0 : i.slot === 'night' ? 2 : 1; }
   function bySlotOrder(a, b) { return slotRank(a) - slotRank(b) || byOrder(a, b); }
-  function orderedItems(freq) { return activeItems().filter((i) => i.freq === freq).sort(bySlotOrder); }
+  // 毎年: 締め切り月が早い順（未設定は末尾）、同月内は手動順
+  function dueRank(i) { return i.dueMonth ? i.dueMonth : 99; }
+  function byDueOrder(a, b) { return dueRank(a) - dueRank(b) || byOrder(a, b); }
+  // 単発: 期限日（YYYY-MM-DD）の近い順
+  function ymd(d = new Date()) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function daysUntil(dateStr, now = new Date()) {
+    const [y, m, dd] = dateStr.split('-').map(Number);
+    const target = new Date(y, m - 1, dd);
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((target - today) / 86400000);
+  }
+  // 期限の表示: { text, state }  state: 'over'（過ぎた・今日）/ 'soon'（3日以内）/ ''
+  // 目標日（未設定の古いデータは締切日と同じ扱い）
+  function targetOf(item) { return item.targetDate || item.dueDate || null; }
+  function fmtShort(dateStr, now = new Date()) {
+    const [y, m, dd] = dateStr.split('-').map(Number);
+    return (y === now.getFullYear() ? '' : y + '/') + m + '/' + dd;
+  }
+  // 単発のバッジ。並びと「あと○日」は目標日基準、赤は締切基準
+  //   締切を過ぎた／締切が今日 → 赤
+  //   目標日を過ぎた（締切はまだ）→ 橙「目標を○日過ぎ」
+  //   目標日が今日〜3日以内 → 橙（締切と同じ日なら今日は赤）
+  function onceDue(item, now = new Date()) {
+    if (!item.dueDate) return { text: '', state: '' };
+    const dl = daysUntil(item.dueDate, now);
+    const tg = daysUntil(targetOf(item), now);
+    const same = targetOf(item) === item.dueDate;
+    if (dl < 0) return { text: same ? (-dl) + '日過ぎ' : '締切を' + (-dl) + '日過ぎ', state: 'over' };
+    if (dl === 0) return { text: same ? '今日' : '締切が今日', state: 'over' };
+    if (tg < 0) return { text: '目標を' + (-tg) + '日過ぎ', state: 'soon' };
+    if (tg === 0) return { text: '今日', state: 'soon' };
+    if (tg === 1) return { text: '明日', state: 'soon' };
+    if (tg <= 3) return { text: 'あと' + tg + '日', state: 'soon' };
+    return { text: fmtShort(targetOf(item), now), state: '' };
+  }
+  function byDateOrder(a, b) {
+    return (targetOf(a) || '9999').localeCompare(targetOf(b) || '9999')
+      || (a.dueDate || '9999').localeCompare(b.dueDate || '9999') || byOrder(a, b);
+  }
+  // 毎月: 「中盤以降にやる」は下へ、それぞれの中は手動順
+  function byLateOrder(a, b) { return (a.lateMonth ? 1 : 0) - (b.lateMonth ? 1 : 0) || byOrder(a, b); }
+  function sortFor(freq) {
+    if (freq === 'yearly') return byDueOrder;
+    if (freq === 'monthly') return byLateOrder;
+    if (freq === 'once') return byDateOrder;
+    return bySlotOrder;
+  }
+  function orderedItems(freq) {
+    return activeItems().filter((i) => i.freq === freq).sort(sortFor(freq));
+  }
+  // 期限の状態: 'over'=過ぎた / 'soon'=今月 / '' =まだ先・未設定
+  function dueState(item, d = new Date()) {
+    if (!item.dueMonth) return '';
+    const m = d.getMonth() + 1;
+    if (item.dueMonth < m) return 'over';
+    if (item.dueMonth === m) return 'soon';
+    return '';
+  }
   function activeItems() { return state.items.filter((i) => !i.archivedAt); }
   function archivedItems() {
     return state.items.filter((i) => i.archivedAt).sort((a, b) => (b.archivedAt || 0) - (a.archivedAt || 0));
@@ -630,7 +769,16 @@
         (reorder ? '' : '<span class="check">' + checkSVG + '</span>') +
         (item.slot === 'morning' ? '<span class="sun">' + sunSVG + '</span>' : '') +
         (item.slot === 'night' ? '<span class="sun">' + moonSVG + '</span>' : '') +
-        '<span class="label"></span>' +
+        // 単発: 目標日と締切が違い、バッジが締切の話をしていないときだけ「締切 ○/○」を添える
+        (item.freq === 'once' && item.dueDate && targetOf(item) !== item.dueDate && daysUntil(item.dueDate) > 0
+          ? '<span class="label-col"><span class="label"></span><span class="sub">締切 ' + fmtShort(item.dueDate) + '</span></span>'
+          : '<span class="label"></span>') +
+        (item.freq === 'yearly' && item.oneOff ? '<span class="oneoff-badge">1回</span>' : '') +
+        (item.freq === 'monthly' && item.lateMonth ? '<span class="oneoff-badge">中盤〜</span>' : '') +
+        (item.freq === 'once' && item.dueDate
+          ? (() => { const o = onceDue(item); return '<span class="due-badge ' + o.state + '">' + o.text + '</span>'; })() : '') +
+        (item.freq === 'yearly' && item.dueMonth
+          ? '<span class="due-badge ' + (isDone(item) ? '' : dueState(item)) + '">' + item.dueMonth + '月</span>' : '') +
         (reorder ? '<span class="handle" data-handle>' + handleSVG + '</span>'
                  : (withActions ? '<button class="edit-chev" data-act="edit" aria-label="編集">' + chevSVG + '</button>' : '')) +
       '</div>' +
@@ -645,6 +793,11 @@
   function monthRemindDue(d = new Date()) {
     const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
     return (lastDay - d.getDate()) <= 6; // 残り7日以内（末日含む）
+  }
+  function yearRemindDue(d = new Date()) {
+    const end = new Date(d.getFullYear(), 11, 31);
+    const days = Math.floor((end - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+    return days <= 30; // 12月に入ったあたりから（残り31日以内）
   }
   // ---------- アプリアイコンのバッジ（未完了件数） ----------
   // Badging API。現時点のiOS Safari/PWAは未対応で何も起きないが、
@@ -673,6 +826,17 @@
       const n = pendingCount('monthly');
       if (n > 0) rows.push({ tab: 'monthly', label: '今月', n });
     }
+    // 毎年: 締め切り月が今月以前の未完了を優先。12月は締め切り未設定も含めて全部。
+    const yearlyPending = orderedItems('yearly').filter((i) => !isDone(i));
+    const dueNow = yearlyPending.filter((i) => dueState(i) !== '');
+    if (dueNow.length > 0) {
+      rows.push({ tab: 'yearly', label: '期限が来た', n: dueNow.length, custom: true });
+    } else if (yearRemindDue() && yearlyPending.length > 0) {
+      rows.push({ tab: 'yearly', label: '今年', n: yearlyPending.length });
+    }
+    // 単発: 期限を過ぎた・3日以内
+    const onceNear = orderedItems('once').filter((i) => i.dueDate && daysUntil(targetOf(i)) <= 3);
+    if (onceNear.length > 0) rows.push({ tab: 'once', n: onceNear.length, text: '単発タスク、期限が近いものが' });
     if (rows.length === 0) return;
     const wrap = document.createElement('div');
     wrap.className = 'reminder-wrap';
@@ -691,7 +855,11 @@
       b.dataset.tab = r.tab;
       b.innerHTML =
         '<span class="rm-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></span>' +
-        '<span class="rm-text">' + r.label + 'の残り <b>' + r.n + '件</b></span>' +
+        '<span class="rm-text">' + (r.text
+            ? r.text + ' <b>' + r.n + '件</b>'
+            : r.custom
+            ? '今年のタスク、期限が来たものが <b>' + r.n + '件</b>'
+            : r.label + 'の残り <b>' + r.n + '件</b>') + '</span>' +
         '<span class="rm-chev">›</span>';
       wrap.appendChild(b);
     }
@@ -706,19 +874,20 @@
     swipedRow = null;
     scroll.innerHTML = '';
 
-    const freqsToShow = state.tab === 'all' ? FREQS : [state.tab];
+    const freqsToShow = [state.tab];
     let totalRendered = 0;
 
-    // 毎日タブの先頭に、毎週/毎月の残件リマインド（後半だけ）
+    // 毎日タブの先頭に、毎週/毎月/毎年の残件リマインド（期限が近いときだけ）
     if (state.tab === 'daily' && !state.reordering) renderReminders(scroll);
 
-    function makeGroup(items) {
+    function makeGroup(items, freq) {
       const group = document.createElement('div');
       group.className = 'card-group';
       // 通常は未完了→完了の順、各パートは手動order。並べ替えモードでは純粋にorder順。
+      const cmp = sortFor(freq);
       const sorted = state.reordering
-        ? [...items].sort(bySlotOrder)
-        : [...items.filter((i) => !isDone(i)).sort(bySlotOrder), ...items.filter(isDone).sort(bySlotOrder)];
+        ? [...items].sort(cmp)
+        : [...items.filter((i) => !isDone(i)).sort(cmp), ...items.filter(isDone).sort(cmp)];
       for (const item of sorted) {
         group.insertAdjacentHTML('beforeend', rowHTML(item));
         const wrap = group.lastElementChild;
@@ -729,32 +898,48 @@
     }
     for (const freq of freqsToShow) {
       const items = orderedItems(freq);
-      if (state.tab === 'all' && items.length === 0) continue;
-
       const doneCount = items.filter(isDone).length;
       const header = document.createElement('div');
-      if (state.tab === 'all') {
-        header.className = 'section-header';
-        header.innerHTML = '<span>' + FREQ_LABEL[freq] + '</span><span class="count">' + doneCount + ' / ' + items.length + '</span>';
-      } else {
-        header.className = 'progress-line';
-        const periodName = freq === 'daily' ? '今日' : freq === 'weekly' ? '今週' : '今月';
-        header.innerHTML = '<span>' + periodName + 'の完了</span><span class="count">' + doneCount + ' / ' + items.length + '</span>';
-      }
+      header.className = 'progress-line';
+      header.innerHTML = freq === 'once'
+        ? '<span>期限が近い順</span><span class="count">' + items.length + '件</span>'
+        : '<span>' + PERIOD_NAME[freq] + 'の完了</span><span class="count">' + doneCount + ' / ' + items.length + '</span>';
       scroll.appendChild(header);
 
-      if (items.length > 0) scroll.appendChild(makeGroup(items));
+      if (items.length > 0) scroll.appendChild(makeGroup(items, freq));
       totalRendered += items.length;
     }
 
     if (totalRendered === 0) {
-      scroll.innerHTML = '<div class="empty-hint">まだルーティンがありません<br>右上の「＋」で追加</div>';
+      // 空のときも、上のリマインド（毎日タブ）は残す。見出しだけ外して案内を足す
+      scroll.querySelectorAll('.progress-line').forEach((el) => el.remove());
+      scroll.insertAdjacentHTML('beforeend', state.tab === 'once'
+        ? '<div class="empty-hint">期限のある単発タスクはありません<br>右上の「＋」で追加</div>'
+        : '<div class="empty-hint">まだルーティンがありません<br>右上の「＋」で追加</div>');
     }
   }
 
   // ---------- 行操作 ----------
   async function toggleItem(item, rerender) {
     const willComplete = !isDone(item);
+    if (willComplete && (item.freq === 'once' || (item.oneOff && item.freq === 'yearly'))) {
+      item.donePeriod = periodKey(item.freq);
+      item.archivedAt = Date.now();
+      item.updatedAt = Date.now();
+      haptic(14);
+      await put('items', item);
+      await loadAll();
+      rerender();
+      showToast('「' + item.title + '」完了・過去に移動', async () => {
+        const it = state.items.find((i) => i.id === item.id);
+        if (!it) return;
+        it.archivedAt = null; it.donePeriod = null; it.updatedAt = Date.now();
+        await put('items', it);
+        await loadAll();
+        rerender();
+      });
+      return;
+    }
     item.donePeriod = willComplete ? periodKey(item.freq) : null;
     item.updatedAt = Date.now();
     haptic(willComplete ? 14 : 8);   // 完了はしっかり、解除は控えめ
@@ -781,13 +966,14 @@
   }
 
   // ---------- トースト ----------
-  let toastTimer = null;
+  let toastTimer = null, toastHideTimer = null;
   function hideToast() {
     clearTimeout(toastTimer);
+    clearTimeout(toastHideTimer);
     const toast = $('#toast');
     toast.style.opacity = '0';
     toast.style.transform = 'translateY(12px)';
-    setTimeout(() => { toast.style.display = 'none'; }, 250);
+    toastHideTimer = setTimeout(() => { toast.style.display = 'none'; }, 250);
   }
   function showToast(msg, onUndo) {
     const toast = $('#toast');
@@ -796,6 +982,7 @@
     undoBtn.style.display = onUndo ? '' : 'none';
     undoBtn.onclick = async () => { hideToast(); if (onUndo) await onUndo(); };
     clearTimeout(toastTimer);
+    clearTimeout(toastHideTimer);
     toast.style.display = 'flex';
     // 表示を反映させてからフェードイン
     requestAnimationFrame(() => {
@@ -892,7 +1079,7 @@
   function updateReorderUI() {
     const on = state.reordering;
     // 「すべて」タブでは並べ替え不可
-    const canReorder = state.tab !== 'all';
+    const canReorder = state.tab !== 'once';   // 単発は期限日順で固定
     $('#reorderBtn').style.display = (!on && canReorder) ? '' : 'none';
     $('#addBtn').style.display = on ? 'none' : '';
     $('#reorderDoneBtn').style.display = on ? '' : 'none';
@@ -978,7 +1165,48 @@
     state.sheetFreq = freq;
     $$('#freqSeg button').forEach((b) => b.classList.toggle('active', b.dataset.freq === freq));
     $('#slotSegWrap').style.display = freq === 'daily' ? '' : 'none';
+    $('#dueSegWrap').style.display = freq === 'yearly' ? '' : 'none';
+    $('#lateWrap').style.display = freq === 'monthly' ? '' : 'none';
+    $('#dateWrap').style.display = freq === 'once' ? '' : 'none';
+    showDateError(false);
   }
+  // 締め切り月グリッド（なし + 1〜12月）
+  function buildDueGrid() {
+    const g = $('#dueGrid');
+    g.innerHTML = '<button data-due="">なし</button>' +
+      Array.from({ length: 12 }, (_, i) => '<button data-due="' + (i+1) + '">' + (i+1) + '月</button>').join('');
+  }
+  function setSheetDue(m) {
+    state.sheetDue = m ? Number(m) : null;
+    $$('#dueGrid button').forEach((b) => {
+      const v = b.dataset.due ? Number(b.dataset.due) : null;
+      b.classList.toggle('active', v === state.sheetDue);
+    });
+  }
+  function showDateError(msg, field) {
+    $('#dateError').style.display = msg ? '' : 'none';
+    $('#dateError').textContent = msg || '';
+    $('#dateInput').classList.toggle('err', !!msg && field !== 'target');
+    $('#targetInput').classList.toggle('err', !!msg && field === 'target');
+  }
+  let targetLinked = true;   // 目標日が締切日と連動しているか
+  $('#dateInput').addEventListener('change', () => {
+    showDateError(false);
+    if (targetLinked || !$('#targetInput').value) $('#targetInput').value = $('#dateInput').value;
+  });
+  $('#targetInput').addEventListener('change', () => {
+    showDateError(false);
+    targetLinked = !$('#targetInput').value || $('#targetInput').value === $('#dateInput').value;
+  });
+  function setSheetLate(on) {
+    state.sheetLate = !!on;
+    $('#lateSwitch').classList.toggle('on', state.sheetLate);
+  }
+  $('#lateRow').addEventListener('click', () => setSheetLate(!state.sheetLate));
+  $('#dueGrid').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-due]');
+    if (btn) setSheetDue(btn.dataset.due);
+  });
   function setSheetSlot(slot) {
     state.sheetSlot = slot || '';
     $$('#slotSeg button').forEach((b) => b.classList.toggle('active', b.dataset.slot === state.sheetSlot));
@@ -997,8 +1225,13 @@
     $('#sheetTitle').textContent = item ? 'ルーティンを編集' : 'ルーティンを追加';
     $('#titleInput').value = item ? item.title : '';
     $('#deleteBtn').style.display = item ? '' : 'none';
-    setSheetFreq(item ? item.freq : (state.tab === 'all' ? 'daily' : state.tab));
+    setSheetFreq(item ? item.freq : state.tab);
     setSheetSlot(item ? (item.slot || '') : '');
+    setSheetDue(item ? (item.dueMonth || null) : null);
+    $('#dateInput').value = item && item.dueDate ? item.dueDate : '';
+    $('#targetInput').value = item ? (targetOf(item) || '') : '';
+    targetLinked = !item || !item.targetDate || item.targetDate === item.dueDate;
+    setSheetLate(item ? !!item.lateMonth : false);
     $('#sheetBackdrop').classList.add('show');
     $('#editSheet').classList.add('show');
     if (!item) setTimeout(() => $('#titleInput').focus(), 320);
@@ -1012,9 +1245,20 @@
   $('#addBtn').addEventListener('click', () => openSheet());
   $('#titleInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#saveBtn').click(); });
 
+  let saving = false;
   $('#saveBtn').addEventListener('click', async () => {
     const title = $('#titleInput').value.trim();
-    if (!title) return;
+    if (!title || saving) return;
+    saving = true;
+    try { await saveSheet(title); } finally { saving = false; }
+  });
+  async function saveSheet(title) {
+    const dueDate = state.sheetFreq === 'once' ? $('#dateInput').value : null;
+    let targetDate = state.sheetFreq === 'once' ? ($('#targetInput').value || dueDate) : null;
+    if (state.sheetFreq === 'once') {
+      if (!dueDate) { showDateError('締切日を選んでください', 'due'); return; }
+      if (targetDate > dueDate) { showDateError('目標日は締切日より前にしてください', 'target'); return; }
+    }
     if (state.editingId) {
       const item = state.items.find((i) => i.id === state.editingId);
       if (item) {
@@ -1022,6 +1266,11 @@
         item.title = title;
         item.freq = state.sheetFreq;
         item.slot = state.sheetFreq === 'daily' ? (state.sheetSlot || null) : null;
+        item.dueMonth = state.sheetFreq === 'yearly' ? (state.sheetDue || null) : null;
+        item.oneOff = false;
+        item.dueDate = dueDate;
+        item.targetDate = targetDate;
+        item.lateMonth = state.sheetFreq === 'monthly' && state.sheetLate;
         item.morning = item.slot === 'morning';  // 旧フィールドも同期（後方互換）
         item.updatedAt = Date.now();
         await put('items', item);
@@ -1032,6 +1281,11 @@
       const item = {
         id: uid(), title, freq: state.sheetFreq,
         slot: state.sheetFreq === 'daily' ? (state.sheetSlot || null) : null,
+        dueMonth: state.sheetFreq === 'yearly' ? (state.sheetDue || null) : null,
+        oneOff: false,
+        dueDate,
+        targetDate,
+        lateMonth: state.sheetFreq === 'monthly' && state.sheetLate,
         morning: state.sheetFreq === 'daily' && state.sheetSlot === 'morning',
         order: maxOrder + 1000,
         donePeriod: null, createdAt: Date.now(), updatedAt: Date.now(),
@@ -1042,7 +1296,7 @@
     await loadAll();
     closeSheet();
     renderList();
-  });
+  }
 
   $('#deleteBtn').addEventListener('click', async () => {
     if (!state.editingId) return;
@@ -1179,7 +1433,7 @@
       row.innerHTML =
         '<div class="archive-meta">' +
           '<span class="archive-title"></span>' +
-          '<span class="archive-sub">' + FREQ_LABEL[item.freq] + '・' + fmtDate(item.archivedAt) + 'にやめた</span>' +
+          '<span class="archive-sub">' + FREQ_LABEL[item.freq] + '・' + fmtDate(item.archivedAt) + ((item.oneOff || item.freq === 'once') && item.donePeriod ? 'に完了' : 'にやめた') + '</span>' +
         '</div>' +
         '<button class="archive-restore" data-act="restore">戻す</button>' +
         '<button class="archive-trash" data-act="trash" aria-label="完全に削除">' +
@@ -1395,6 +1649,7 @@
   // ---------- 起動 ----------
   (async function init() {
     applyTheme(currentTheme());
+    buildDueGrid();
     setupViewportTracking();
     await openDB();
     await loadAll();
@@ -1416,6 +1671,7 @@
     const longAway = hiddenAt !== null && Date.now() - hiddenAt > RESET_AFTER_MS;
     hiddenAt = null;
     if (longAway) {
+      state.reordering = false;
       // 実質的な「再起動」扱い: 朝なら朝モード、そうでなければ毎日タブ
       const mode = slotModeToShow();
       if (mode) {
