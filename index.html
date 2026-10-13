@@ -587,7 +587,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.10.0';
+  const APP_VERSION = '2.11.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -694,6 +694,14 @@
   const PERIOD_NAME = { daily: '今日', weekly: '今週', monthly: '今月', yearly: '今年', once: '' };
   const state = { items: [], tab: 'daily', editingId: null, sheetFreq: 'daily', sheetSlot: '', sheetDue: null, sheetLate: false, sheetSoon: false, reordering: false };
 
+  // 単発: 完了してから翌日の終わりまでは一覧にグレーで残す
+  function onceKeepUntil(doneAt) {
+    const d = new Date(doneAt);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 2).getTime() - 1;   // 翌日 23:59:59.999
+  }
+  function onceExpired(i, now = Date.now()) {
+    return i.freq === 'once' && isDone(i) && !i.archivedAt && now > onceKeepUntil(i.doneAt || 0);
+  }
   async function loadAll() {
     state.items = await getAll('items');
     // 既存データに order が無ければ createdAt を初期順として付与（マイグレーション）
@@ -709,6 +717,7 @@
         it.freq = 'once'; it.oneOff = false; it.dueMonth = null; it.donePeriod = null;
         dirty = true;
       }
+      if (onceExpired(it)) { it.archivedAt = it.doneAt || Date.now(); dirty = true; }
       if (dirty) await put('items', it);
     }
   }
@@ -764,7 +773,7 @@
     return bySlotOrder;
   }
   function orderedItems(freq) {
-    return activeItems().filter((i) => i.freq === freq).sort(sortFor(freq));
+    return activeItems().filter((i) => i.freq === freq && !onceExpired(i)).sort(sortFor(freq));
   }
   // 期限の状態: 'over'=過ぎた / 'soon'=今月 / '' =まだ先・未設定
   function dueState(item, d = new Date()) {
@@ -831,7 +840,13 @@
         (item.freq === 'yearly' && item.oneOff ? '<span class="oneoff-badge">1回</span>' : '') +
         (item.freq === 'monthly' && item.lateMonth ? '<span class="oneoff-badge">中盤〜</span>' : '') +
         (item.freq === 'once' && item.dueDate
-          ? (() => { const o = onceDue(item); return '<span class="due-badge ' + o.state + '">' + o.text + '</span>'; })() : '') +
+          ? (() => {
+              if (done) {   // 完了済み: いつ完了したか（今日／昨日）
+                const n = item.doneAt ? -daysUntil(ymd(new Date(item.doneAt))) : 0;
+                return '<span class="due-badge">' + (n <= 0 ? '今日完了' : '昨日完了') + '</span>';
+              }
+              const o = onceDue(item); return '<span class="due-badge ' + o.state + '">' + o.text + '</span>';
+            })() : '') +
         (item.freq === 'yearly' && item.dueMonth
           ? '<span class="due-badge ' + (isDone(item) ? '' : dueState(item)) + '">' + item.dueMonth + '月</span>' : '') +
         (reorder ? '<span class="handle" data-handle>' + handleSVG + '</span>'
@@ -890,7 +905,7 @@
       rows.push({ tab: 'yearly', label: '今年', n: yearlyPending.length });
     }
     // 単発: 期限を過ぎた・3日以内
-    const onceNear = orderedItems('once').filter((i) => i.dueDate && daysUntil(targetOf(i)) <= 3 && !isPinned(i));
+    const onceNear = orderedItems('once').filter((i) => i.dueDate && !isDone(i) && daysUntil(targetOf(i)) <= 3 && !isPinned(i));
     if (onceNear.length > 0) rows.push({ tab: 'once', n: onceNear.length, text: '単発タスク、期限が近いものが' });
     if (rows.length === 0) return;
     const wrap = document.createElement('div');
@@ -971,7 +986,7 @@
       const header = document.createElement('div');
       header.className = 'progress-line';
       header.innerHTML = freq === 'once'
-        ? '<span>期限が近い順</span><span class="count">' + items.length + '件</span>'
+        ? '<span>期限が近い順</span><span class="count">' + (items.length - doneCount) + '件</span>'
         : '<span>' + PERIOD_NAME[freq] + 'の完了</span><span class="count">' + doneCount + ' / ' + items.length + '</span>';
       scroll.appendChild(header);
 
@@ -1010,27 +1025,9 @@
   // ---------- 行操作 ----------
   async function toggleItem(item, rerender) {
     const willComplete = !isDone(item);
-    if (willComplete && (item.freq === 'once' || (item.oneOff && item.freq === 'yearly'))) {
-      const hadSoon = !!item.soon, hadSoonAt = item.soonAt || null;
-      item.soon = false;
-      item.donePeriod = periodKey(item.freq);
-      item.archivedAt = Date.now();
-      item.updatedAt = Date.now();
-      haptic(14);
-      await put('items', item);
-      await loadAll();
-      rerender();
-      showToast('「' + item.title + '」完了・過去に移動', async () => {
-        const it = state.items.find((i) => i.id === item.id);
-        if (!it) return;
-        it.archivedAt = null; it.donePeriod = null; it.soon = hadSoon; it.soonAt = hadSoonAt; it.updatedAt = Date.now();
-        await put('items', it);
-        await loadAll();
-        rerender();
-      });
-      return;
-    }
     item.donePeriod = willComplete ? periodKey(item.freq) : null;
+    // 単発: 完了時刻を記録（翌日の終わりまでグレーで残し、その後で過去へ）
+    if (item.freq === 'once') item.doneAt = willComplete ? Date.now() : null;
     if (willComplete) { item.soonBefore = !!item.soon; item.soon = false; }
     else if (item.soonBefore) { item.soon = true; item.soonBefore = false; }
     item.updatedAt = Date.now();
@@ -1559,6 +1556,7 @@
     if (btn.dataset.act === 'restore') {
       item.archivedAt = null;
       item.donePeriod = null;
+      item.doneAt = null;
       item.updatedAt = Date.now();
       await put('items', item);
       await loadAll();
@@ -1789,8 +1787,12 @@
       }
       return;
     }
-    if ($('#morningView').classList.contains('active')) renderMorning();
-    else renderList();
+    const redraw = () => {
+      if ($('#morningView').classList.contains('active')) renderMorning();
+      else renderList();
+    };
+    if (state.items.some((i) => onceExpired(i))) loadAll().then(redraw);
+    else redraw();
   });
 
   // ---------- visualViewport（キーボード対策） ----------
