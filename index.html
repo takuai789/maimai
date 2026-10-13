@@ -181,6 +181,30 @@
   /* 5タブでもラベルが詰まらないように */
   .tabbar button .tab-label { white-space: nowrap; }
 
+  /* ---- 毎年: 来年の分（薄く表示・見るだけ） ---- */
+  .next-year-head { padding-top: 22px; }
+  .next-year-head span:last-child { font-weight: 500; color: var(--tertiary); }
+  .card-group.next-year { opacity: 0.5; pointer-events: none; }
+  .next-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; border-bottom: 0.5px solid var(--sep);
+  }
+  .next-row:last-child { border-bottom: 0; }
+  .next-row .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---- 近日中にやる（全タブの一番上） ---- */
+  .soon-head { padding-top: 2px; color: var(--green); }
+  .soon-head span:last-child { color: var(--green); }
+  .card-group.soon-group { box-shadow: 0 0 0 1.5px var(--green-soft), 0 2px 10px rgba(0,0,0,0.04); margin-bottom: 18px; }
+  .tab-tag {
+    flex-shrink: 0; margin-left: 8px; font-size: 11px; font-weight: 600;
+    padding: 2px 7px; border-radius: 6px; background: var(--green-soft); color: var(--green);
+  }
+  .stale-tag {
+    flex-shrink: 0; margin-left: 6px; font-size: 11px; font-weight: 600;
+    padding: 2px 7px; border-radius: 999px; background: rgba(217,119,6,0.14); color: #B45309;
+  }
+
   /* ---- 朝トグル（編集シート） ---- */
   .toggle-row {
     display: flex; align-items: center; justify-content: space-between;
@@ -513,6 +537,12 @@
       <div class="switch" id="lateSwitch"></div>
     </div>
   </div>
+  <div id="soonWrap" style="margin-bottom:16px; display:none;">
+    <div class="toggle-row" id="soonRow" style="margin:0;">
+      <span>近日中にやる<span style="display:block; font-size:12px; color:var(--secondary);">2〜3日以内に。どのタブでも一番上に出る</span></span>
+      <div class="switch" id="soonSwitch"></div>
+    </div>
+  </div>
   <button class="primary-btn" id="saveBtn">保存</button>
   <button class="danger-btn" id="deleteBtn" style="display:none;">やめる（過去のルーティンに残す）</button>
 </div>
@@ -557,7 +587,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.8.0';
+  const APP_VERSION = '2.10.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -662,7 +692,7 @@
   const FREQ_LABEL = { daily: '毎日', weekly: '毎週', monthly: '毎月', yearly: '毎年', once: '単発' };
   const TAB_TITLE = FREQ_LABEL;
   const PERIOD_NAME = { daily: '今日', weekly: '今週', monthly: '今月', yearly: '今年', once: '' };
-  const state = { items: [], tab: 'daily', editingId: null, sheetFreq: 'daily', sheetSlot: '', sheetDue: null, sheetLate: false, reordering: false };
+  const state = { items: [], tab: 'daily', editingId: null, sheetFreq: 'daily', sheetSlot: '', sheetDue: null, sheetLate: false, sheetSoon: false, reordering: false };
 
   async function loadAll() {
     state.items = await getAll('items');
@@ -744,6 +774,29 @@
     if (item.dueMonth === m) return 'soon';
     return '';
   }
+  // 毎年: 来年の締め切り月まで何か月か（今月=10、締め切り3月 → 2+3=5）
+  const NEXT_YEAR_WINDOW = 6;
+  function monthsToNextYear(item, d = new Date()) {
+    return (12 - (d.getMonth() + 1)) + item.dueMonth;
+  }
+  function nextYearPreview(d = new Date()) {
+    return activeItems()
+      .filter((i) => i.freq === 'yearly' && i.dueMonth && monthsToNextYear(i, d) <= NEXT_YEAR_WINDOW)
+      .sort(byDueOrder);
+  }
+  // 近日中にやる: 毎月・毎年・単発だけ。未完了のあいだ全タブの一番上に出す
+  const SOON_FREQS = ['monthly', 'yearly', 'once'];
+  function isPinned(i) { return !!i.soon && SOON_FREQS.includes(i.freq) && !i.archivedAt && !isDone(i); }
+  function pinnedItems() {
+    return activeItems().filter(isPinned).sort((a, b) => (a.soonAt || 0) - (b.soonAt || 0));
+  }
+  function soonDays(i) {   // フラグを付けた日を1日目として何日目か
+    if (!i.soonAt) return 1;
+    const a = new Date(i.soonAt); const now = new Date();
+    const d0 = new Date(a.getFullYear(), a.getMonth(), a.getDate());
+    const d1 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((d1 - d0) / 86400000) + 1;
+  }
   function activeItems() { return state.items.filter((i) => !i.archivedAt); }
   function archivedItems() {
     return state.items.filter((i) => i.archivedAt).sort((a, b) => (b.archivedAt || 0) - (a.archivedAt || 0));
@@ -756,7 +809,7 @@
   const moonSVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5B7FDB" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>';
   const handleSVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8h16M4 16h16"/></svg>';
   const chevSVG = '<svg width="9" height="16" viewBox="0 0 9 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l6 7-6 7"/></svg>';
-  function rowHTML(item, withActions = true) {
+  function rowHTML(item, withActions = true, pinned = false) {
     const done = isDone(item);
     const reorder = state.reordering;
     return '<div class="row-wrap">' +
@@ -773,6 +826,8 @@
         (item.freq === 'once' && item.dueDate && targetOf(item) !== item.dueDate && daysUntil(item.dueDate) > 0
           ? '<span class="label-col"><span class="label"></span><span class="sub">締切 ' + fmtShort(item.dueDate) + '</span></span>'
           : '<span class="label"></span>') +
+        (pinned ? '<span class="tab-tag">' + FREQ_LABEL[item.freq] + '</span>' : '') +
+        (pinned && soonDays(item) >= 4 ? '<span class="stale-tag">' + soonDays(item) + '日目</span>' : '') +
         (item.freq === 'yearly' && item.oneOff ? '<span class="oneoff-badge">1回</span>' : '') +
         (item.freq === 'monthly' && item.lateMonth ? '<span class="oneoff-badge">中盤〜</span>' : '') +
         (item.freq === 'once' && item.dueDate
@@ -828,14 +883,14 @@
     }
     // 毎年: 締め切り月が今月以前の未完了を優先。12月は締め切り未設定も含めて全部。
     const yearlyPending = orderedItems('yearly').filter((i) => !isDone(i));
-    const dueNow = yearlyPending.filter((i) => dueState(i) !== '');
+    const dueNow = yearlyPending.filter((i) => dueState(i) !== '' && !isPinned(i));   // 近日中に出ているものは数えない
     if (dueNow.length > 0) {
       rows.push({ tab: 'yearly', label: '期限が来た', n: dueNow.length, custom: true });
     } else if (yearRemindDue() && yearlyPending.length > 0) {
       rows.push({ tab: 'yearly', label: '今年', n: yearlyPending.length });
     }
     // 単発: 期限を過ぎた・3日以内
-    const onceNear = orderedItems('once').filter((i) => i.dueDate && daysUntil(targetOf(i)) <= 3);
+    const onceNear = orderedItems('once').filter((i) => i.dueDate && daysUntil(targetOf(i)) <= 3 && !isPinned(i));
     if (onceNear.length > 0) rows.push({ tab: 'once', n: onceNear.length, text: '単発タスク、期限が近いものが' });
     if (rows.length === 0) return;
     const wrap = document.createElement('div');
@@ -877,6 +932,20 @@
     const freqsToShow = [state.tab];
     let totalRendered = 0;
 
+    // どのタブでも一番上に「近日中にやる」（並べ替え中は出さない）
+    const pinned = state.reordering ? [] : pinnedItems();
+    if (pinned.length > 0) {
+      scroll.insertAdjacentHTML('beforeend',
+        '<div class="section-header soon-head"><span>近日中にやる</span><span>' + pinned.length + '件</span></div>');
+      const g = document.createElement('div');
+      g.className = 'card-group soon-group';
+      for (const it of pinned) {
+        g.insertAdjacentHTML('beforeend', rowHTML(it, true, true));
+        g.lastElementChild.querySelector('.label').textContent = it.title;
+      }
+      scroll.appendChild(g);
+    }
+
     // 毎日タブの先頭に、毎週/毎月/毎年の残件リマインド（期限が近いときだけ）
     if (state.tab === 'daily' && !state.reordering) renderReminders(scroll);
 
@@ -906,8 +975,27 @@
         : '<span>' + PERIOD_NAME[freq] + 'の完了</span><span class="count">' + doneCount + ' / ' + items.length + '</span>';
       scroll.appendChild(header);
 
-      if (items.length > 0) scroll.appendChild(makeGroup(items, freq));
+      // 近日中のものは上に出しているので、ここでは外す（二重に出さない）
+      const listed = state.reordering ? items : items.filter((i) => !isPinned(i));
+      if (listed.length > 0) scroll.appendChild(makeGroup(listed, freq));
       totalRendered += items.length;
+
+      if (freq === 'yearly' && !state.reordering) {
+        const nexts = nextYearPreview();
+        if (nexts.length > 0) {
+          const y = new Date().getFullYear() + 1;
+          scroll.insertAdjacentHTML('beforeend',
+            '<div class="section-header next-year-head"><span>' + y + '年の分（半年以内）</span><span>見るだけ</span></div>');
+          const g = document.createElement('div');
+          g.className = 'card-group next-year';
+          for (const it of nexts) {
+            g.insertAdjacentHTML('beforeend',
+              '<div class="next-row"><span class="label"></span><span class="due-badge">' + y + '年' + it.dueMonth + '月</span></div>');
+            g.lastElementChild.querySelector('.label').textContent = it.title;
+          }
+          scroll.appendChild(g);
+        }
+      }
     }
 
     if (totalRendered === 0) {
@@ -923,6 +1011,8 @@
   async function toggleItem(item, rerender) {
     const willComplete = !isDone(item);
     if (willComplete && (item.freq === 'once' || (item.oneOff && item.freq === 'yearly'))) {
+      const hadSoon = !!item.soon, hadSoonAt = item.soonAt || null;
+      item.soon = false;
       item.donePeriod = periodKey(item.freq);
       item.archivedAt = Date.now();
       item.updatedAt = Date.now();
@@ -933,7 +1023,7 @@
       showToast('「' + item.title + '」完了・過去に移動', async () => {
         const it = state.items.find((i) => i.id === item.id);
         if (!it) return;
-        it.archivedAt = null; it.donePeriod = null; it.updatedAt = Date.now();
+        it.archivedAt = null; it.donePeriod = null; it.soon = hadSoon; it.soonAt = hadSoonAt; it.updatedAt = Date.now();
         await put('items', it);
         await loadAll();
         rerender();
@@ -941,6 +1031,8 @@
       return;
     }
     item.donePeriod = willComplete ? periodKey(item.freq) : null;
+    if (willComplete) { item.soonBefore = !!item.soon; item.soon = false; }
+    else if (item.soonBefore) { item.soon = true; item.soonBefore = false; }
     item.updatedAt = Date.now();
     haptic(willComplete ? 14 : 8);   // 完了はしっかり、解除は控えめ
     await put('items', item);
@@ -1167,6 +1259,7 @@
     $('#slotSegWrap').style.display = freq === 'daily' ? '' : 'none';
     $('#dueSegWrap').style.display = freq === 'yearly' ? '' : 'none';
     $('#lateWrap').style.display = freq === 'monthly' ? '' : 'none';
+    $('#soonWrap').style.display = SOON_FREQS.includes(freq) ? '' : 'none';
     $('#dateWrap').style.display = freq === 'once' ? '' : 'none';
     showDateError(false);
   }
@@ -1198,6 +1291,11 @@
     showDateError(false);
     targetLinked = !$('#targetInput').value || $('#targetInput').value === $('#dateInput').value;
   });
+  function setSheetSoon(on) {
+    state.sheetSoon = !!on;
+    $('#soonSwitch').classList.toggle('on', state.sheetSoon);
+  }
+  $('#soonRow').addEventListener('click', () => setSheetSoon(!state.sheetSoon));
   function setSheetLate(on) {
     state.sheetLate = !!on;
     $('#lateSwitch').classList.toggle('on', state.sheetLate);
@@ -1232,6 +1330,7 @@
     $('#targetInput').value = item ? (targetOf(item) || '') : '';
     targetLinked = !item || !item.targetDate || item.targetDate === item.dueDate;
     setSheetLate(item ? !!item.lateMonth : false);
+    setSheetSoon(item ? !!item.soon : false);
     $('#sheetBackdrop').classList.add('show');
     $('#editSheet').classList.add('show');
     if (!item) setTimeout(() => $('#titleInput').focus(), 320);
@@ -1271,6 +1370,11 @@
         item.dueDate = dueDate;
         item.targetDate = targetDate;
         item.lateMonth = state.sheetFreq === 'monthly' && state.sheetLate;
+        const nextSoon = SOON_FREQS.includes(state.sheetFreq) && state.sheetSoon;
+        if (nextSoon && !item.soon) item.soonAt = Date.now();   // 付けた日から数える
+        if (!nextSoon) item.soonAt = null;
+        item.soon = nextSoon;
+        item.soonBefore = false;
         item.morning = item.slot === 'morning';  // 旧フィールドも同期（後方互換）
         item.updatedAt = Date.now();
         await put('items', item);
@@ -1286,6 +1390,8 @@
         dueDate,
         targetDate,
         lateMonth: state.sheetFreq === 'monthly' && state.sheetLate,
+        soon: SOON_FREQS.includes(state.sheetFreq) && state.sheetSoon,
+        soonAt: SOON_FREQS.includes(state.sheetFreq) && state.sheetSoon ? Date.now() : null,
         morning: state.sheetFreq === 'daily' && state.sheetSlot === 'morning',
         order: maxOrder + 1000,
         donePeriod: null, createdAt: Date.now(), updatedAt: Date.now(),
