@@ -587,7 +587,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.11.0';
+  const APP_VERSION = '2.12.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -1590,7 +1590,7 @@
   }
   function backupFileName() {
     const d = new Date();
-    return 'maimai-backup-' + d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + '.json';
+    return 'AURORA_' + d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + '.json';
   }
 
   async function getDirHandle() {
@@ -1720,14 +1720,29 @@
 
   // ---------- JSON 書き出し/取り込み ----------
   const SCHEMA = 'maimai.v1';
-  $('#exportBtn').addEventListener('click', () => {
-    const data = { schema: SCHEMA, exportedAt: new Date().toISOString(), items: state.items };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'maimai-sync.json';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+
+  // ---------- バックアップ（全アプリ共通の作法） ----------
+  // iPhone：共有メニュー →「"ファイル"に保存」→ iCloud Drive「アプリのバックアップ」フォルダ
+  // Mac：ダウンロード。ファイル名は「アプリ名_YYYY-MM-DD.json」でそろえる。
+  function bkName(app) { const d = new Date(); return `${app}_${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.json`; }
+  async function bkSave(app, text) { // 戻り値 'ok' | 'cancel'
+    const name = bkName(app);
+    if (navigator.maxTouchPoints > 0) {
+      try {
+        const file = new File([text], name, { type: 'application/json' });
+        if (navigator.canShare && navigator.share && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return 'ok'; }
+      } catch (e) { if (e && e.name === 'AbortError') return 'cancel'; }
+    }
+    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return 'ok';
+  }
+  $('#exportBtn').addEventListener('click', async () => {
+    if (await bkSave('AURORA', JSON.stringify(backupData(), null, 2)) !== 'ok') return;
+    markBackupDone();
+    renderList();
   });
   $('#importBtn').addEventListener('click', () => $('#importFile').click());
   $('#importFile').addEventListener('change', async (e) => {
