@@ -449,7 +449,7 @@
       <div class="settings-note" id="backupNote"></div>
       <div class="settings-group">
         <button class="settings-row" id="exportBtn">
-          <span>データを書き出す（JSON）</span><span class="chev">›</span>
+          <span>データを書き出す（バックアップ）</span><span class="chev">›</span>
         </button>
         <button class="settings-row" id="importBtn">
           <span>データを取り込む</span><span class="chev">›</span>
@@ -587,7 +587,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.12.0';
+  const APP_VERSION = '2.13.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -1691,10 +1691,11 @@
   async function renderBackupSettings() {
     const folderEl = $('#backupFolder'); if (!folderEl) return;
     const rowEl = $('#backupFolderRow');
+    const autoGroup = rowEl.parentElement;
     if (!fsSupported()) {
-      rowEl.style.display = 'none';
+      autoGroup.style.display = 'none';
     } else {
-      rowEl.style.display = '';
+      autoGroup.style.display = '';
       const rec = await (async () => { try { return await getOne('meta', BACKUP_META_ID); } catch (e) { return null; } })();
       folderEl.textContent = rec && rec.name ? rec.name + ' ›' : '未設定 ›';
     }
@@ -1706,10 +1707,8 @@
     if (note) {
       if (fsSupported()) {
         note.innerHTML = 'フォルダを選んでおくと、週に1回アプリを開いたときに自動で書き出します。iCloud Drive 内を選べば他の端末からも見られます。';
-      } else if (shareSupported()) {
-        note.innerHTML = '7日ごとに毎日タブへ催促が出ます。タップすると共有シートが開くので「ファイルに保存」→ iCloud Drive の好きなフォルダを選んでください。保存先は次回も同じ場所が初期表示されます。';
       } else {
-        note.innerHTML = '7日ごとに毎日タブへ催促が出ます。タップするとファイルがダウンロードされます。';
+        note.innerHTML = '前回のバックアップ：' + (last ? new Date(last).toLocaleDateString('ja-JP') : 'まだなし') + '。7日たつと毎日タブにお知らせが出ます。';
       }
     }
   }
@@ -1742,7 +1741,9 @@
   $('#exportBtn').addEventListener('click', async () => {
     if (await bkSave('AURORA', JSON.stringify(backupData(), null, 2)) !== 'ok') return;
     markBackupDone();
+    renderBackupSettings();
     renderList();
+    showToast('書き出しました');
   });
   $('#importBtn').addEventListener('click', () => $('#importFile').click());
   $('#importFile').addEventListener('change', async (e) => {
@@ -1750,7 +1751,7 @@
     if (!file) return;
     try {
       const data = JSON.parse(await file.text());
-      if (data.schema !== SCHEMA) { alert('AURORAのデータではないようです'); return; }
+      if (data.schema !== SCHEMA) { showToast('AURORAのデータではないようです'); return; }
       const localById = new Map(state.items.map((n) => [n.id, n]));
       for (const it of (data.items || [])) {
         const local = localById.get(it.id);
@@ -1758,9 +1759,9 @@
       }
       await loadAll();
       renderList();
-      alert('取り込みました');
+      showToast('取り込みました');
     } catch (err) {
-      alert('取り込みに失敗しました');
+      showToast('取り込めませんでした');
     }
     e.target.value = '';
   });
