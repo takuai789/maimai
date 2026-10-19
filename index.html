@@ -520,6 +520,11 @@
   <div class="mp-body" id="memoPopBody"></div>
   <div class="mp-actions"><button class="mp-close" id="memoPopClose">閉じる</button><button id="memoPopEdit">編集</button></div>
 </div></div>
+<div class="memo-pop-bg" id="askBg"><div class="memo-pop">
+  <div class="mp-title" id="askTitle"></div>
+  <div class="mp-body" id="askBody"></div>
+  <div class="mp-actions"><button class="mp-close" id="askNo"></button><button id="askYes"></button></div>
+</div></div>
 <div class="sheet-backdrop" id="sheetBackdrop"></div>
 <div class="sheet" id="editSheet">
   <h2 id="sheetTitle">ルーティンを追加</h2>
@@ -614,7 +619,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.14.0';
+  const APP_VERSION = '2.15.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -1743,6 +1748,22 @@
     }
   }
 
+  // iPhoneの共有シートは、「ファイルに保存」やショートカットで保存できても
+  // 「キャンセルされた」と返してくることがある。そのときは本人に聞く。
+  function askSaved() {
+    return new Promise((resolve) => {
+      $('#askTitle').textContent = 'バックアップは保存できましたか？';
+      $('#askBody').textContent = '保存できていれば、バックアップのお知らせを消します。';
+      $('#askYes').textContent = '保存できた';
+      $('#askNo').textContent = 'やめた';
+      const bg = $('#askBg');
+      const done = (v) => { bg.classList.remove('show'); $('#askYes').onclick = $('#askNo').onclick = null; resolve(v); };
+      $('#askYes').onclick = () => done(true);
+      $('#askNo').onclick = () => done(false);
+      bg.classList.add('show');
+    });
+  }
+
   // 起動時の自動バックアップ（権限が既に許可済みのときだけ静かに実行）
   async function maybeAutoBackup() {
     if (!backupDue() || !fsSupported()) return;
@@ -1762,8 +1783,8 @@
     // ② iPhone など：共有シートから保存先を選ぶ
     if (!ok && shareSupported()) {
       const r = await shareBackup();
-      if (r === 'cancel') return;           // 自分でやめたので何も変えない
-      if (r === 'ok') { markBackupDone(); ok = true; }
+      if (r === 'cancel' && !(await askSaved())) return;   // 本当にやめたときは何も変えない
+      if (r !== 'fail') { markBackupDone(); ok = true; }
     }
     // ③ 最後の手段：ダウンロード
     if (!ok) { downloadBackup(); markBackupDone(); ok = true; }
@@ -1824,7 +1845,8 @@
     return 'ok';
   }
   $('#exportBtn').addEventListener('click', async () => {
-    if (await bkSave('AURORA', JSON.stringify(backupData(), null, 2)) !== 'ok') return;
+    const r = await bkSave('AURORA', JSON.stringify(backupData(), null, 2));
+    if (r !== 'ok' && !(await askSaved())) return;
     markBackupDone();
     renderBackupSettings();
     renderList();
