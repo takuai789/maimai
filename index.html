@@ -103,7 +103,7 @@
   .routine-row {
     display: flex; align-items: center; gap: 12px;
     padding: 13px 14px; background: var(--card); position: relative;
-    cursor: pointer; user-select: none; -webkit-user-select: none;
+    cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
     transition: transform 0.25s cubic-bezier(.32,.72,0,1);
   }
   .routine-row .check {
@@ -304,6 +304,27 @@
     padding: 12px 14px; border: 0; border-radius: 12px; background: var(--card);
     outline: none; margin-bottom: 14px;
   }
+  .sheet textarea {
+    width: 100%; font-family: inherit; font-size: 16px; line-height: 1.5;
+    padding: 10px 14px; border: 0; border-radius: 12px; background: var(--card); color: var(--ink);
+    outline: none; margin: -6px 0 14px; resize: none; height: calc(1.5em * 3 + 20px);
+  }
+  .sheet textarea::placeholder { color: var(--tertiary); }
+  /* メモあり印（行のタイトル横） */
+  .memo-dot { flex-shrink: 0; display: inline-flex; color: var(--tertiary); margin-left: -2px; }
+  /* 長押しで出るメモ */
+  .memo-pop-bg { position: fixed; inset: 0; z-index: 120; background: rgba(0,0,0,0.28); display: flex; align-items: center; justify-content: center; padding: 24px;
+    opacity: 0; pointer-events: none; transition: opacity .18s; }
+  .memo-pop-bg.show { opacity: 1; pointer-events: auto; }
+  .memo-pop { width: 100%; max-width: 340px; background: var(--card); border-radius: 18px; padding: 18px 18px 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+    transform: scale(.94); transition: transform .18s; }
+  .memo-pop-bg.show .memo-pop { transform: scale(1); }
+  .memo-pop .mp-title { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+  .memo-pop .mp-body { font-size: 15px; line-height: 1.65; color: var(--ink); white-space: pre-wrap; word-break: break-word; max-height: 50vh; overflow-y: auto; }
+  .memo-pop .mp-body.empty { color: var(--tertiary); }
+  .memo-pop .mp-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 10px; }
+  .memo-pop .mp-actions button { border: 0; background: none; font-family: inherit; font-size: 15px; font-weight: 600; padding: 8px 12px; color: var(--green); cursor: pointer; }
+  .memo-pop .mp-actions .mp-close { color: var(--secondary); font-weight: 500; }
   .segmented {
     display: flex; background: rgba(118,118,128,0.12); border-radius: 10px; padding: 2px;
     margin-bottom: 16px;
@@ -494,10 +515,16 @@
 </div>
 
 <!-- 追加・編集シート -->
+<div class="memo-pop-bg" id="memoPopBg"><div class="memo-pop" id="memoPop">
+  <div class="mp-title" id="memoPopTitle"></div>
+  <div class="mp-body" id="memoPopBody"></div>
+  <div class="mp-actions"><button class="mp-close" id="memoPopClose">閉じる</button><button id="memoPopEdit">編集</button></div>
+</div></div>
 <div class="sheet-backdrop" id="sheetBackdrop"></div>
 <div class="sheet" id="editSheet">
   <h2 id="sheetTitle">ルーティンを追加</h2>
   <input type="text" id="titleInput" placeholder="例: 洗濯、プロテイン補充" enterkeyhint="done" />
+  <textarea id="memoInput" rows="3" placeholder="メモ（3行くらいまで・なくてもOK）&#10;例: 洗剤は詰め替え1/3、ネットに入れる"></textarea>
   <div class="segmented" id="freqSeg">
     <button data-freq="daily">毎日</button>
     <button data-freq="weekly">毎週</button>
@@ -587,7 +614,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.13.0';
+  const APP_VERSION = '2.14.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -818,6 +845,7 @@
   const moonSVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5B7FDB" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>';
   const handleSVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8h16M4 16h16"/></svg>';
   const chevSVG = '<svg width="9" height="16" viewBox="0 0 9 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l6 7-6 7"/></svg>';
+  const memoSVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M5 12h14M5 18h9"/></svg>';
   function rowHTML(item, withActions = true, pinned = false) {
     const done = isDone(item);
     const reorder = state.reordering;
@@ -835,6 +863,7 @@
         (item.freq === 'once' && item.dueDate && targetOf(item) !== item.dueDate && daysUntil(item.dueDate) > 0
           ? '<span class="label-col"><span class="label"></span><span class="sub">締切 ' + fmtShort(item.dueDate) + '</span></span>'
           : '<span class="label"></span>') +
+        ((item.memo || '').trim() && !reorder ? '<span class="memo-dot" aria-label="メモあり">' + memoSVG + '</span>' : '') +
         (pinned ? '<span class="tab-tag">' + FREQ_LABEL[item.freq] + '</span>' : '') +
         (pinned && soonDays(item) >= 4 ? '<span class="stale-tag">' + soonDays(item) + '日目</span>' : '') +
         (item.freq === 'yearly' && item.oneOff ? '<span class="oneoff-badge">1回</span>' : '') +
@@ -1119,6 +1148,59 @@
     if (item) await requestToggle(item, renderList);
   });
 
+  // ---------- 長押しでメモだけ見る ----------
+  let lp = null, lpFired = false, memoItem = null, memoOpenedAt = 0;
+  function openMemoPop(item) {
+    memoItem = item;
+    $('#memoPopTitle').textContent = item.title;
+    const m = (item.memo || '').trim();
+    $('#memoPopBody').textContent = m || 'メモはまだありません';
+    $('#memoPopBody').classList.toggle('empty', !m);
+    $('#memoPopEdit').textContent = m ? '編集' : 'メモを書く';
+    $('#memoPopBg').classList.add('show');
+    memoOpenedAt = Date.now();
+  }
+  function closeMemoPop() { $('#memoPopBg').classList.remove('show'); memoItem = null; }
+  $('#memoPopBg').addEventListener('click', (e) => { if (e.target.id === 'memoPopBg' && Date.now() - memoOpenedAt > 450) closeMemoPop(); });
+  $('#memoPopClose').addEventListener('click', closeMemoPop);
+  $('#memoPopEdit').addEventListener('click', () => {
+    const it = memoItem; closeMemoPop(); if (!it) return;
+    openSheet(it);
+    if (!(it.memo || '').trim()) setTimeout(() => $('#memoInput').focus(), 320);
+  });
+  function bindLongPress(el) {
+    el.addEventListener('touchstart', (e) => {
+      if (state.reordering || e.touches.length > 1) return;
+      const row = e.target.closest('.routine-row');
+      if (!row || e.target.closest('.row-act, .edit-chev')) return;
+      const t = e.touches[0];
+      clearTimeout(lp && lp.timer);
+      lp = { x: t.clientX, y: t.clientY, timer: setTimeout(() => {
+        lp = null;
+        if (swipedRow) return;
+        const item = state.items.find((i) => i.id === row.dataset.id);
+        if (!item) return;
+        lpFired = true; haptic(12); openMemoPop(item);
+      }, 480) };
+    }, { passive: true });
+    el.addEventListener('touchmove', (e) => {
+      if (!lp) return;
+      const t = e.touches[0];
+      if (Math.abs(t.clientX - lp.x) > 8 || Math.abs(t.clientY - lp.y) > 8) { clearTimeout(lp.timer); lp = null; }
+    }, { passive: true });
+    const end = (e) => {
+      if (lp) { clearTimeout(lp.timer); lp = null; }
+      // 長押しで開いたあと指を離したときのタップ（下の行や背景）を出さない
+      if (lpFired) { if (e.cancelable) e.preventDefault(); setTimeout(() => { lpFired = false; }, 400); }
+    };
+    el.addEventListener('touchend', end, { passive: false }); el.addEventListener('touchcancel', end);
+    // 長押しのあとに来るタップ（完了の切り替え）は止める
+    el.addEventListener('click', (e) => { if (lpFired) { e.stopPropagation(); e.preventDefault(); lpFired = false; } }, true);
+    el.addEventListener('contextmenu', (e) => { if (e.target.closest('.routine-row')) e.preventDefault(); });
+  }
+  bindLongPress($('#listScroll'));
+  bindLongPress($('#morningList'));
+
   // ---------- スワイプ（左スワイプで編集／やめる） ----------
   const ACTION_W = 152;
   let swipedRow = null, sw = null, suppressClick = false;
@@ -1319,6 +1401,7 @@
     state.editingId = item ? item.id : null;
     $('#sheetTitle').textContent = item ? 'ルーティンを編集' : 'ルーティンを追加';
     $('#titleInput').value = item ? item.title : '';
+    $('#memoInput').value = item ? (item.memo || '') : '';
     $('#deleteBtn').style.display = item ? '' : 'none';
     setSheetFreq(item ? item.freq : state.tab);
     setSheetSlot(item ? (item.slot || '') : '');
@@ -1336,6 +1419,7 @@
     $('#sheetBackdrop').classList.remove('show');
     $('#editSheet').classList.remove('show');
     $('#titleInput').blur();
+    $('#memoInput').blur();
   }
   $('#sheetBackdrop').addEventListener('click', closeSheet);
   $('#addBtn').addEventListener('click', () => openSheet());
@@ -1360,6 +1444,7 @@
       if (item) {
         if (item.freq !== state.sheetFreq) item.donePeriod = null; // 周期変更時はリセット
         item.title = title;
+        item.memo = $('#memoInput').value.trim();
         item.freq = state.sheetFreq;
         item.slot = state.sheetFreq === 'daily' ? (state.sheetSlot || null) : null;
         item.dueMonth = state.sheetFreq === 'yearly' ? (state.sheetDue || null) : null;
@@ -1380,7 +1465,7 @@
       const sameFreq = activeItems().filter((i) => i.freq === state.sheetFreq);
       const maxOrder = sameFreq.reduce((m, i) => Math.max(m, i.order ?? 0), 0);
       const item = {
-        id: uid(), title, freq: state.sheetFreq,
+        id: uid(), title, memo: $('#memoInput').value.trim(), freq: state.sheetFreq,
         slot: state.sheetFreq === 'daily' ? (state.sheetSlot || null) : null,
         dueMonth: state.sheetFreq === 'yearly' ? (state.sheetDue || null) : null,
         oneOff: false,
