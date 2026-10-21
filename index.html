@@ -620,7 +620,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.16.0';
+  const APP_VERSION = '2.17.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -1127,6 +1127,12 @@
     const nx = e.target.closest('[data-nextid]');
     if (nx) {
       const item = state.items.find((i) => i.id === nx.dataset.nextid); if (!item) return;
+      // ほかの行と同じタップ設定（ダブルタップ設定なら2回で切り替え）
+      if (tapMode() !== 'single') {
+        const now = Date.now(), key = 'next:' + item.id;
+        if (!(lastTap.id === key && now - lastTap.t < DOUBLE_MS)) { lastTap = { id: key, t: now }; haptic(6); return; }
+        lastTap = { id: null, t: 0 };
+      }
       const on = !isDoneNext(item);
       item.doneNext = on ? nextYearKey() : null;
       item.updatedAt = Date.now();
