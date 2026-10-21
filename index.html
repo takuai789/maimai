@@ -184,7 +184,8 @@
   /* ---- 毎年: 来年の分（薄く表示・見るだけ） ---- */
   .next-year-head { padding-top: 22px; }
   .next-year-head span:last-child { font-weight: 500; color: var(--tertiary); }
-  .card-group.next-year { opacity: 0.5; pointer-events: none; }
+  .card-group.next-year .routine-row:not(.done) .label { color: var(--secondary); }
+  .card-group.next-year .routine-row:not(.done) .check { opacity: .7; }
   .next-row {
     display: flex; align-items: center; gap: 12px;
     padding: 12px 14px; border-bottom: 0.5px solid var(--sep);
@@ -619,7 +620,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.15.0';
+  const APP_VERSION = '2.16.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -717,7 +718,10 @@
     if (freq === 'once') return 'once';   // 単発は期間なし（完了したら過去へ移る）
     return d.getFullYear() + '-' + pad(d.getMonth() + 1);
   }
-  function isDone(item) { return item.donePeriod === periodKey(item.freq); }
+  // 毎年のタスクは、来年の分を先に済ませられる（doneNext に来年の年を入れる。年が変わるとそのまま「完了」になる）
+  function isDone(item) { const k = periodKey(item.freq); return item.donePeriod === k || (item.freq === 'yearly' && item.doneNext === k); }
+  const nextYearKey = () => String(new Date().getFullYear() + 1);
+  const isDoneNext = (item) => item.doneNext === nextYearKey();
 
   // ---------- State ----------
   const FREQS = ['daily', 'weekly', 'monthly', 'yearly', 'once'];
@@ -1034,12 +1038,13 @@
         if (nexts.length > 0) {
           const y = new Date().getFullYear() + 1;
           scroll.insertAdjacentHTML('beforeend',
-            '<div class="section-header next-year-head"><span>' + y + '年の分（半年以内）</span><span>見るだけ</span></div>');
+            '<div class="section-header next-year-head"><span>' + y + '年の分（半年以内）</span><span>先に済ませたらチェック</span></div>');
           const g = document.createElement('div');
           g.className = 'card-group next-year';
           for (const it of nexts) {
+            const dn = isDoneNext(it);
             g.insertAdjacentHTML('beforeend',
-              '<div class="next-row"><span class="label"></span><span class="due-badge">' + y + '年' + it.dueMonth + '月</span></div>');
+              '<div class="routine-row next-row' + (dn ? ' done' : '') + '" data-nextid="' + it.id + '"><span class="check">' + checkSVG + '</span><span class="label"></span><span class="due-badge">' + (dn ? y + '年分 済み' : y + '年' + it.dueMonth + '月') + '</span></div>');
             g.lastElementChild.querySelector('.label').textContent = it.title;
           }
           scroll.appendChild(g);
@@ -1060,6 +1065,7 @@
   async function toggleItem(item, rerender) {
     const willComplete = !isDone(item);
     item.donePeriod = willComplete ? periodKey(item.freq) : null;
+    if (!willComplete && item.doneNext === periodKey(item.freq)) item.doneNext = null;   // 去年のうちに先に済ませた分も外す
     // 単発: 完了時刻を記録（翌日の終わりまでグレーで残し、その後で過去へ）
     if (item.freq === 'once') item.doneAt = willComplete ? Date.now() : null;
     if (willComplete) { item.soonBefore = !!item.soon; item.soon = false; }
@@ -1117,6 +1123,19 @@
 
   $('#listScroll').addEventListener('click', async (e) => {
     if (state.reordering) return;  // 並べ替え中はタップでチェックしない
+    // 来年の分を先に済ませる
+    const nx = e.target.closest('[data-nextid]');
+    if (nx) {
+      const item = state.items.find((i) => i.id === nx.dataset.nextid); if (!item) return;
+      const on = !isDoneNext(item);
+      item.doneNext = on ? nextYearKey() : null;
+      item.updatedAt = Date.now();
+      haptic(on ? 14 : 8);
+      await put('items', item);
+      renderList();
+      showToast(on ? '「' + item.title + '」の' + nextYearKey() + '年分を済ませました' : '「' + item.title + '」の' + nextYearKey() + '年分を戻しました');
+      return;
+    }
     // 残件リマインドのタップ → 該当タブへ
     const rm = e.target.closest('.reminder');
     if (rm) {
@@ -1220,6 +1239,7 @@
     if (e.target.closest('.row-act')) return;   // アクションボタンのタップはクリック処理に任せる
     const row = e.target.closest('.routine-row');
     if (!row) { closeSwipedRow(); return; }
+    if (row.dataset.nextid) return;              // 来年の分はスワイプしない
     sw = { row, x: e.touches[0].clientX, y: e.touches[0].clientY,
            base: swipedRow === row ? -ACTION_W : 0, dir: null, tx: 0, moved: false };
   }, { passive: true });
