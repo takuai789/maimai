@@ -38,10 +38,11 @@
     overscroll-behavior: none;
   }
   #app {
+    position: fixed; left: 0; right: 0; top: var(--app-top, 0px);
     height: var(--app-height, 100%);
     display: flex; flex-direction: column;
     padding-top: var(--safe-top);
-    transition: height 0.15s ease-out;
+    
   }
   .view { display: none; flex-direction: column; flex: 1; min-height: 0; }
   .view.active { display: flex; }
@@ -293,7 +294,7 @@
   }
   .sheet-backdrop.show { opacity: 1; pointer-events: auto; }
   .sheet {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 101;
+    position: fixed; left: 0; right: 0; bottom: var(--kb, 0px); z-index: 101;
     background: var(--bg); border-radius: 16px 16px 0 0;
     padding: 16px 16px calc(var(--safe-bottom) + 16px);
     transform: translateY(105%); transition: transform 0.3s cubic-bezier(.32,.72,0,1);
@@ -621,7 +622,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.18.0';
+  const APP_VERSION = '2.19.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -1948,17 +1949,35 @@
 
   // ---------- visualViewport（キーボード対策） ----------
   function setupViewportTracking() {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const root = document.documentElement;
-    let baseHeight = vv.height;
+    // iPhoneの定石（CLAUDE.md）：アプリ全体を「いま見えている範囲」（キーボードの上）にぴったり重ね、
+    // 下から出るシートは --kb ぶん持ち上げる。iPhoneは見える範囲を少しずつ動かすので、入力中は毎フレーム追いかける
+    const vv = window.visualViewport; if (!vv) return;
+    const root = document.documentElement; let baseH = vv.height, lastH = -1, lastT = -1, lastK = -1;
     function apply() {
-      root.style.setProperty('--app-height', vv.height + 'px');
-      document.body.classList.toggle('keyboard-open', vv.height < baseHeight - 120);
+      const h = Math.round(vv.height), t = Math.max(0, Math.round(vv.offsetTop));
+      const k = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      if (h !== lastH) { root.style.setProperty('--app-height', h + 'px'); lastH = h; }
+      if (t !== lastT) { root.style.setProperty('--app-top', t + 'px'); lastT = t; }
+      if (k !== lastK) { root.style.setProperty('--kb', k + 'px'); lastK = k; }
+      document.body.classList.toggle('keyboard-open', h < baseH - 120);
     }
-    vv.addEventListener('resize', apply);
-    vv.addEventListener('scroll', apply);
-    window.addEventListener('orientationchange', () => { setTimeout(() => { baseHeight = vv.height; apply(); }, 300); });
+    let until = 0, looping = false;
+    function follow(ms) {
+      until = Math.max(until, performance.now() + ms);
+      if (looping) return; looping = true;
+      const tick = () => { apply(); const a = document.activeElement; const typing = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); if (typing || performance.now() < until) requestAnimationFrame(tick); else looping = false; };
+      requestAnimationFrame(tick);
+    }
+    vv.addEventListener('resize', () => follow(600)); vv.addEventListener('scroll', () => follow(600));
+    document.addEventListener('focusin', (e) => {
+      follow(1200);
+      const el = e.target;
+      if (!el || !/^(INPUT|TEXTAREA)$/.test(el.tagName) || /^(date|time|month|checkbox|radio|file|range|color)$/.test(el.type)) return;
+      // キーボードが出きったあと、入力欄を見える位置へ
+      [350, 700].forEach((ms) => setTimeout(() => { if (document.activeElement === el) { try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {} } }, ms));
+    });
+    document.addEventListener('focusout', () => follow(1200));
+    window.addEventListener('orientationchange', () => setTimeout(() => { baseH = vv.height; follow(600); }, 300));
     apply();
   }
 
