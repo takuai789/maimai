@@ -374,6 +374,9 @@
   }
   #updateBanner.show { transform: translateY(0); }
   #updateBanner svg { display: block; flex-shrink: 0; }
+
+  /* キーボードが出ているときも、シートが画面の上にはみ出さないように（見えている高さに収めて中をスクロール） */
+  .sheet { max-height: calc(var(--app-height, 100vh) - var(--safe-top, env(safe-area-inset-top, 0px)) - 16px) !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 </style>
 </head>
 <body>
@@ -622,7 +625,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.19.0';
+  const APP_VERSION = '2.20.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
