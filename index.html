@@ -154,6 +154,7 @@
     padding: 3px 9px; border-radius: 999px;
     background: rgba(118,118,128,0.14); color: var(--secondary);
   }
+  .due-badge.week { background: rgba(255,59,48,0.08); color: #D9483F; }
   .due-badge.soon { background: rgba(217,119,6,0.14); color: #B45309; }
   .due-badge.over { background: rgba(255,59,48,0.12); color: var(--red); }
   .routine-row.done .due-badge { opacity: 0.4; }
@@ -620,7 +621,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.17.0';
+  const APP_VERSION = '2.18.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -794,6 +795,7 @@
     if (tg === 0) return { text: '今日', state: 'soon' };
     if (tg === 1) return { text: '明日', state: 'soon' };
     if (tg <= 3) return { text: 'あと' + tg + '日', state: 'soon' };
+    if (tg <= 7) return { text: fmtShort(targetOf(item), now), state: 'week' };   // 1週間前から薄い赤
     return { text: fmtShort(targetOf(item), now), state: '' };
   }
   function byDateOrder(a, b) {
