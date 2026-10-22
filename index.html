@@ -143,6 +143,8 @@
 
   /* ---- 締め切り月の選択 ---- */
   .month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .season-row { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+  .season-row select { flex: 1; min-width: 0; font: inherit; font-size: 17px; font-weight: 600; text-align: center; padding: 12px 8px; border: 0; border-radius: 12px; background: var(--card); color: var(--ink); -webkit-appearance: none; appearance: none; }
   .month-grid button {
     border: 0; border-radius: 10px; background: var(--card); color: var(--ink);
     font-family: inherit; font-size: 14px; font-weight: 500; padding: 10px 0; cursor: pointer;
@@ -187,6 +189,9 @@
   .next-year-head { padding-top: 22px; }
   .next-year-head span:last-child { font-weight: 500; color: var(--tertiary); }
   .card-group.next-year .routine-row:not(.done) .label { color: var(--secondary); }
+  .card-group.off-season .routine-row .label { color: var(--secondary); }
+  .card-group.off-season .routine-row .check { opacity: .35; }
+  .card-group.off-season .routine-row { cursor: default; }
   .card-group.next-year .routine-row:not(.done) .check { opacity: .7; }
   .next-row {
     display: flex; align-items: center; gap: 12px;
@@ -552,8 +557,21 @@
     </div>
   </div>
   <div id="dueSegWrap" style="margin-bottom:16px; display:none;">
-    <div style="font-size:13px; color:var(--secondary); padding:0 4px 6px;">締め切りの月</div>
-    <div class="month-grid" id="dueGrid"></div>
+    <div class="segmented" id="yearModeSeg" style="margin-bottom:12px;">
+      <button data-ym="due">締め切りの月</button>
+      <button data-ym="season">期間で1回</button>
+    </div>
+    <div id="dueBox">
+      <div style="font-size:13px; color:var(--secondary); padding:0 4px 6px;">締め切りの月</div>
+      <div class="month-grid" id="dueGrid"></div>
+    </div>
+    <div id="seasonBox" style="display:none;">
+      <div class="season-row">
+        <select id="seasonFrom"></select><span>月から</span>
+        <select id="seasonTo"></select><span>月まで</span>
+      </div>
+      <div style="font-size:12px; color:var(--secondary); padding:6px 4px 0; line-height:1.6;">この期間のどこかで1回やればOK。年をまたいでも大丈夫です（例：8月〜2月）。期間外は一覧の下に「期間外」として出ます。</div>
+    </div>
   </div>
   <div id="dateWrap" style="margin-bottom:16px; display:none;">
     <div class="date-pair">
@@ -625,7 +643,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.20.0';
+  const APP_VERSION = '2.21.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -724,7 +742,25 @@
     return d.getFullYear() + '-' + pad(d.getMonth() + 1);
   }
   // 毎年のタスクは、来年の分を先に済ませられる（doneNext に来年の年を入れる。年が変わるとそのまま「完了」になる）
-  function isDone(item) { const k = periodKey(item.freq); return item.donePeriod === k || (item.freq === 'yearly' && item.doneNext === k); }
+  // 毎年のうち「期間で1回」（例：8月〜2月）。seasonFrom/seasonTo は月（年をまたいでもよい）
+  const isSeason = (i) => i.freq === 'yearly' && !!i.seasonFrom && !!i.seasonTo;
+  function inSeason(i, d = new Date()) {
+    const m = d.getMonth() + 1, f = i.seasonFrom, t = i.seasonTo;
+    return f <= t ? (m >= f && m <= t) : (m >= f || m <= t);
+  }
+  const offSeason = (i, d = new Date()) => isSeason(i) && !inSeason(i, d);
+  // いまの（期間外なら次の）期間のキー。始まりの年月で表す（8月〜2月なら 2026年8月〜2027年2月 → "s2026-08"）
+  function seasonKey(i, d = new Date()) {
+    const y = d.getFullYear(), m = d.getMonth() + 1, f = i.seasonFrom, t = i.seasonTo;
+    let sy;
+    if (f <= t) sy = m <= t ? y : y + 1;
+    else sy = m >= f ? y : (m <= t ? y - 1 : y);
+    return 's' + sy + '-' + pad(f);
+  }
+  // 期間の終わりまで何か月か（終わりの月＝0）
+  function monthsToSeasonEnd(i, d = new Date()) { const m = d.getMonth() + 1; return (i.seasonTo - m + 12) % 12; }
+  const periodKeyOf = (item, d = new Date()) => isSeason(item) ? seasonKey(item, d) : periodKey(item.freq, d);
+  function isDone(item) { const k = periodKeyOf(item); return item.donePeriod === k || (item.freq === 'yearly' && !isSeason(item) && item.doneNext === k); }
   const nextYearKey = () => String(new Date().getFullYear() + 1);
   const isDoneNext = (item) => item.doneNext === nextYearKey();
 
@@ -767,7 +803,10 @@
   function slotRank(i) { return i.slot === 'morning' ? 0 : i.slot === 'night' ? 2 : 1; }
   function bySlotOrder(a, b) { return slotRank(a) - slotRank(b) || byOrder(a, b); }
   // 毎年: 締め切り月が早い順（未設定は末尾）、同月内は手動順
-  function dueRank(i) { return i.dueMonth ? i.dueMonth : 99; }
+  function dueRank(i) {
+    if (isSeason(i)) { const m = new Date().getMonth() + 1; return m + monthsToSeasonEnd(i); }   // 期間の終わりが近い順に混ぜる
+    return i.dueMonth ? i.dueMonth : 99;
+  }
   function byDueOrder(a, b) { return dueRank(a) - dueRank(b) || byOrder(a, b); }
   // 単発: 期限日（YYYY-MM-DD）の近い順
   function ymd(d = new Date()) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
@@ -815,10 +854,15 @@
     return bySlotOrder;
   }
   function orderedItems(freq) {
-    return activeItems().filter((i) => i.freq === freq && !onceExpired(i)).sort(sortFor(freq));
+    // 期間外のもの（例：8月〜2月のタスクの3〜7月）は数に入れず、下に別で出す
+    return activeItems().filter((i) => i.freq === freq && !onceExpired(i) && !offSeason(i)).sort(sortFor(freq));
+  }
+  function offSeasonItems() {
+    return activeItems().filter((i) => offSeason(i)).sort((a, b) => ((a.seasonFrom - (new Date().getMonth() + 1) + 12) % 12) - ((b.seasonFrom - (new Date().getMonth() + 1) + 12) % 12) || byOrder(a, b));
   }
   // 期限の状態: 'over'=過ぎた / 'soon'=今月 / '' =まだ先・未設定
   function dueState(item, d = new Date()) {
+    if (isSeason(item)) { if (!inSeason(item, d)) return ''; const left = monthsToSeasonEnd(item, d); return left === 0 ? 'over' : left === 1 ? 'soon' : ''; }
     if (!item.dueMonth) return '';
     const m = d.getMonth() + 1;
     if (item.dueMonth < m) return 'over';
@@ -893,6 +937,8 @@
             })() : '') +
         (item.freq === 'yearly' && item.dueMonth
           ? '<span class="due-badge ' + (isDone(item) ? '' : dueState(item)) + '">' + item.dueMonth + '月</span>' : '') +
+        (isSeason(item)
+          ? '<span class="due-badge ' + (isDone(item) || offSeason(item) ? '' : dueState(item)) + '">' + (offSeason(item) ? item.seasonFrom + '月から' : item.seasonFrom + '〜' + item.seasonTo + '月') + '</span>' : '') +
         (reorder ? '<span class="handle" data-handle>' + handleSVG + '</span>'
                  : (withActions ? '<button class="edit-chev" data-act="edit" aria-label="編集">' + chevSVG + '</button>' : '')) +
       '</div>' +
@@ -1040,6 +1086,18 @@
       totalRendered += items.length;
 
       if (freq === 'yearly' && !state.reordering) {
+        const offs = offSeasonItems();
+        if (offs.length > 0) {
+          scroll.insertAdjacentHTML('beforeend',
+            '<div class="section-header next-year-head"><span>期間外</span><span>時期が来たら上に出ます</span></div>');
+          const g = document.createElement('div');
+          g.className = 'card-group off-season';
+          for (const it of offs) {
+            g.insertAdjacentHTML('beforeend', rowHTML(it));
+            g.lastElementChild.querySelector('.label').textContent = it.title;
+          }
+          scroll.appendChild(g);
+        }
         const nexts = nextYearPreview();
         if (nexts.length > 0) {
           const y = new Date().getFullYear() + 1;
@@ -1070,7 +1128,7 @@
   // ---------- 行操作 ----------
   async function toggleItem(item, rerender) {
     const willComplete = !isDone(item);
-    item.donePeriod = willComplete ? periodKey(item.freq) : null;
+    item.donePeriod = willComplete ? periodKeyOf(item) : null;
     if (!willComplete && item.doneNext === periodKey(item.freq)) item.doneNext = null;   // 去年のうちに先に済ませた分も外す
     // 単発: 完了時刻を記録（翌日の終わりまでグレーで残し、その後で過去へ）
     if (item.freq === 'once') item.doneAt = willComplete ? Date.now() : null;
@@ -1181,6 +1239,7 @@
     if (suppressClick) return;            // スワイプ直後のタップは無視
     if (swipedRow) { closeSwipedRow(); return; }  // 開いてる行を閉じるだけ
     const item = state.items.find((i) => i.id === row.dataset.id);
+    if (item && offSeason(item)) { showToast('「' + item.title + '」は' + item.seasonFrom + '月からです'); return; }
     if (item) await requestToggle(item, renderList);
   });
 
@@ -1385,6 +1444,17 @@
     g.innerHTML = '<button data-due="">なし</button>' +
       Array.from({ length: 12 }, (_, i) => '<button data-due="' + (i+1) + '">' + (i+1) + '月</button>').join('');
   }
+  function setYearMode(mode) {
+    state.sheetYearMode = mode;
+    $$('#yearModeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.ym === mode));
+    $('#dueBox').style.display = mode === 'due' ? '' : 'none';
+    $('#seasonBox').style.display = mode === 'season' ? '' : 'none';
+  }
+  (function buildSeasonSelects() {
+    const opts = Array.from({ length: 12 }, (_, i) => '<option value="' + (i + 1) + '">' + (i + 1) + '</option>').join('');
+    $('#seasonFrom').innerHTML = opts; $('#seasonTo').innerHTML = opts;
+  })();
+  $('#yearModeSeg').addEventListener('click', (e) => { const b = e.target.closest('[data-ym]'); if (b) setYearMode(b.dataset.ym); });
   function setSheetDue(m) {
     state.sheetDue = m ? Number(m) : null;
     $$('#dueGrid button').forEach((b) => {
@@ -1443,6 +1513,9 @@
     setSheetFreq(item ? item.freq : state.tab);
     setSheetSlot(item ? (item.slot || '') : '');
     setSheetDue(item ? (item.dueMonth || null) : null);
+    setYearMode(item && isSeason(item) ? 'season' : 'due');
+    $('#seasonFrom').value = String(item && item.seasonFrom ? item.seasonFrom : 8);
+    $('#seasonTo').value = String(item && item.seasonTo ? item.seasonTo : 2);
     $('#dateInput').value = item && item.dueDate ? item.dueDate : '';
     $('#targetInput').value = item ? (targetOf(item) || '') : '';
     targetLinked = !item || !item.targetDate || item.targetDate === item.dueDate;
@@ -1484,7 +1557,12 @@
         item.memo = $('#memoInput').value.trim();
         item.freq = state.sheetFreq;
         item.slot = state.sheetFreq === 'daily' ? (state.sheetSlot || null) : null;
-        item.dueMonth = state.sheetFreq === 'yearly' ? (state.sheetDue || null) : null;
+        const season = state.sheetFreq === 'yearly' && state.sheetYearMode === 'season';
+        const wasKey = isSeason(item) ? seasonKey(item) : null;
+        item.dueMonth = state.sheetFreq === 'yearly' && !season ? (state.sheetDue || null) : null;
+        item.seasonFrom = season ? Number($('#seasonFrom').value) : null;
+        item.seasonTo = season ? Number($('#seasonTo').value) : null;
+        if (season && wasKey !== seasonKey(item)) item.donePeriod = null;   // 期間を変えたら完了は外す
         item.oneOff = false;
         item.dueDate = dueDate;
         item.targetDate = targetDate;
@@ -1504,7 +1582,9 @@
       const item = {
         id: uid(), title, memo: $('#memoInput').value.trim(), freq: state.sheetFreq,
         slot: state.sheetFreq === 'daily' ? (state.sheetSlot || null) : null,
-        dueMonth: state.sheetFreq === 'yearly' ? (state.sheetDue || null) : null,
+        dueMonth: state.sheetFreq === 'yearly' && state.sheetYearMode !== 'season' ? (state.sheetDue || null) : null,
+        seasonFrom: state.sheetFreq === 'yearly' && state.sheetYearMode === 'season' ? Number($('#seasonFrom').value) : null,
+        seasonTo: state.sheetFreq === 'yearly' && state.sheetYearMode === 'season' ? Number($('#seasonTo').value) : null,
         oneOff: false,
         dueDate,
         targetDate,
