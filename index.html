@@ -85,6 +85,9 @@
   .reminder .rm-text { flex: 1; }
   .reminder .rm-text b { font-weight: 700; }
   .reminder .rm-chev { color: rgba(154,91,0,0.5); font-size: 18px; flex-shrink: 0; }
+  /* 毎月の「中盤以降にやる」は14日までグレー（チェックはできる） */
+  .routine-row.early .label, .routine-row.early .label-col, .routine-row.early .oneoff-badge, .routine-row.early .memo-dot, .routine-row.early .sun { opacity: .38; }
+  .routine-row.early .check { opacity: .5; }
   .section-header {
     font-size: 13px; font-weight: 600; color: var(--secondary);
     padding: 18px 4px 6px; display: flex; justify-content: space-between; align-items: baseline;
@@ -707,7 +710,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.23.0';
+  const APP_VERSION = '2.24.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -978,7 +981,7 @@
           '<button class="row-act edit" data-act="edit">編集</button>' +
           '<button class="row-act stop" data-act="stop">やめる</button>' +
         '</div>' : '') +
-      '<div class="routine-row' + (done ? ' done' : '') + '" data-id="' + item.id + '">' +
+      '<div class="routine-row' + (done ? ' done' : '') + (!done && item.freq === 'monthly' && item.lateMonth && new Date().getDate() <= 14 ? ' early' : '') + '" data-id="' + item.id + '">' +
         (reorder ? '' : '<span class="check">' + checkSVG + '</span>') +
         (item.slot === 'morning' ? '<span class="sun">' + sunSVG + '</span>' : '') +
         (item.slot === 'night' ? '<span class="sun">' + moonSVG + '</span>' : '') +
