@@ -400,11 +400,11 @@
   .ms-btns .primary-btn { flex: 1; }
   .ms-btns .ms-del { flex: none; border: 0; border-radius: 13px; background: var(--card); color: var(--red); font-family: inherit; font-size: 15px; font-weight: 600; padding: 0 16px; cursor: pointer; }
   .ms-btns .ms-cancel { flex: none; border: 0; border-radius: 13px; background: var(--card); color: var(--secondary); font-family: inherit; font-size: 15px; padding: 0 14px; cursor: pointer; }
-  /* 日付が近いメモのバナー（上から出る） */
-  #memoBanner { position: fixed; left: 10px; right: 10px; top: calc(var(--app-top, 0px) + var(--safe-top) + 50px); z-index: 60; display: flex; align-items: center; gap: 10px;
-    background: rgba(255,255,255,0.97); border-radius: 16px; padding: 11px 8px 11px 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.16), 0 0 0 .5px rgba(0,0,0,.06);
-    transform: translateY(-160%); opacity: 0; transition: transform .38s cubic-bezier(.32,.72,0,1), opacity .25s; cursor: pointer; max-width: 560px; margin: 0 auto; }
-  #memoBanner.show { transform: translateY(0); opacity: 1; }
+  /* 日付が近いメモのバナー（ナビの下に差しこみ、リストを下に押し下げる＝重ならない） */
+  #memoBanner { flex: none; display: flex; align-items: center; gap: 10px; margin: 0 16px; max-height: 0; overflow: hidden; opacity: 0;
+    background: var(--card); border-radius: 16px; padding: 0 8px 0 14px; box-shadow: 0 0 0 .5px rgba(0,0,0,.06);
+    transition: max-height .35s cubic-bezier(.32,.72,0,1), opacity .25s, margin .35s, padding .35s; cursor: pointer; }
+  #memoBanner.show { max-height: 120px; opacity: 1; margin: 10px 16px 0; padding: 11px 8px 11px 14px; }
   #memoBanner .mb-ico { flex: none; width: 30px; height: 30px; border-radius: 8px; background: #FF9500; color: #fff; display: flex; align-items: center; justify-content: center; }
   #memoBanner .mb-main { flex: 1; min-width: 0; }
   #memoBanner .mb-when { font-size: 12px; font-weight: 700; color: #B45309; }
@@ -454,6 +454,11 @@
         </button>
         <button class="icon-btn" id="reorderDoneBtn" style="display:none; font-size:16px; font-weight:600; width:auto; padding:0 6px;">完了</button>
       </div>
+    </div>
+    <div id="memoBanner" role="button" aria-label="メモのお知らせ">
+      <span class="mb-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg></span>
+      <span class="mb-main"><span class="mb-when" id="mbWhen"></span><span class="mb-text" id="mbText" style="display:block"></span></span>
+      <button class="mb-x" id="mbClose" aria-label="今日は閉じる">✕</button>
     </div>
     <div class="list-scroll" id="listScroll"></div>
     <div class="tabbar" id="tabbar">
@@ -599,11 +604,6 @@
     <div class="ms-btns"><button class="ms-cancel" id="msCancel" style="display:none;">やめる</button><button class="ms-del" id="msDel" style="display:none;">削除</button><button class="primary-btn" id="msSave">追加</button></div>
   </div>
 </div>
-<div id="memoBanner" role="button" aria-label="メモのお知らせ">
-  <span class="mb-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg></span>
-  <span class="mb-main"><span class="mb-when" id="mbWhen"></span><span class="mb-text" id="mbText" style="display:block"></span></span>
-  <button class="mb-x" id="mbClose" aria-label="今日は閉じる">✕</button>
-</div>
 <div class="sheet" id="editSheet">
   <h2 id="sheetTitle">ルーティンを追加</h2>
   <input type="text" id="titleInput" placeholder="例: 洗濯、プロテイン補充" enterkeyhint="done" />
@@ -710,7 +710,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.24.0';
+  const APP_VERSION = '2.25.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
