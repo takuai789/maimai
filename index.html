@@ -85,6 +85,15 @@
   .reminder .rm-text { flex: 1; }
   .reminder .rm-text b { font-weight: 700; }
   .reminder .rm-chev { color: rgba(154,91,0,0.5); font-size: 18px; flex-shrink: 0; }
+  /* 今日はお休み：毎日の未完了をグレーに（チェックはできる） */
+  .routine-row.rest .label, .routine-row.rest .label-col, .routine-row.rest .oneoff-badge, .routine-row.rest .memo-dot, .routine-row.rest .sun { opacity: .38; }
+  .routine-row.rest .check { opacity: .5; }
+  .rest-card { display: flex; align-items: center; gap: 12px; background: #EEF1F8; border-radius: 14px; padding: 12px 12px 12px 14px; margin-bottom: 12px; }
+  .rest-card .ri { font-size: 22px; flex: none; }
+  .rest-card .rt { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; color: #1E3A5F; }
+  .rest-card .rt small { display: block; font-size: 12px; font-weight: 500; color: var(--secondary); margin-top: 2px; }
+  .rest-card button { flex: none; border: 0; background: rgba(255,255,255,.85); color: var(--secondary); font-family: inherit; font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 999px; cursor: pointer; }
+  .rest-btn { display: block; margin: 14px auto 0; border: 0; background: none; color: var(--secondary); font-family: inherit; font-size: 14px; padding: 8px 14px; cursor: pointer; }
   /* 毎月の「中盤以降にやる」は14日までグレー（チェックはできる） */
   .routine-row.early .label, .routine-row.early .label-col, .routine-row.early .oneoff-badge, .routine-row.early .memo-dot, .routine-row.early .sun { opacity: .38; }
   .routine-row.early .check { opacity: .5; }
@@ -710,7 +719,7 @@
   }
 
   // ---------- バージョン ----------
-  const APP_VERSION = '2.25.0';
+  const APP_VERSION = '2.26.0';
   // ---------- テーマカラー ----------
   const THEMES = {
     green:  '#0FA968',
@@ -981,7 +990,7 @@
           '<button class="row-act edit" data-act="edit">編集</button>' +
           '<button class="row-act stop" data-act="stop">やめる</button>' +
         '</div>' : '') +
-      '<div class="routine-row' + (done ? ' done' : '') + (!done && item.freq === 'monthly' && item.lateMonth && new Date().getDate() <= 14 ? ' early' : '') + '" data-id="' + item.id + '">' +
+      '<div class="routine-row' + (done ? ' done' : '') + (!done && item.freq === 'monthly' && item.lateMonth && new Date().getDate() <= 14 ? ' early' : '') + (!done && item.freq === 'daily' && isRestDay() ? ' rest' : '') + '" data-id="' + item.id + '">' +
         (reorder ? '' : '<span class="check">' + checkSVG + '</span>') +
         (item.slot === 'morning' ? '<span class="sun">' + sunSVG + '</span>' : '') +
         (item.slot === 'night' ? '<span class="sun">' + moonSVG + '</span>' : '') +
@@ -1029,11 +1038,15 @@
   // ---------- アプリアイコンのバッジ（未完了件数） ----------
   // Badging API。現時点のiOS Safari/PWAは未対応で何も起きないが、
   // 将来対応された時点でそのまま有効になる。対応環境（Android等）では今すぐ効く。
+  // 今日はお休み（体調が悪い日など）。その日だけ、毎日の未完了をノーカウント扱いにする
+  const REST_KEY = 'maimai.restDay';
+  function isRestDay() { try { return localStorage.getItem(REST_KEY) === periodKey('daily'); } catch (e) { return false; } }
+  function setRestDay(on) { try { if (on) localStorage.setItem(REST_KEY, periodKey('daily')); else localStorage.removeItem(REST_KEY); } catch (e) {} }
   async function updateBadge() {
     if (!('setAppBadge' in navigator)) return;
     try {
       // 「今日やること」の残り = 毎日の未完了。0なら消す。
-      const n = activeItems().filter((i) => i.freq === 'daily' && !isDone(i)).length;
+      const n = isRestDay() ? 0 : activeItems().filter((i) => i.freq === 'daily' && !isDone(i)).length;
       if (n > 0) await navigator.setAppBadge(n);
       else if ('clearAppBadge' in navigator) await navigator.clearAppBadge();
     } catch (e) { /* 権限なし等は黙って無視 */ }
@@ -1093,6 +1106,14 @@
     scroll.appendChild(wrap);
   }
 
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('#listScroll [data-rest]'); if (!b) return;
+    if (b.dataset.rest === 'on') {
+      if (!(await uiAsk('今日はお休みにしますか？\n毎日のまだのものは、今日はノーカウントになります。できたものはチェックしてOK。', 'お休みにする'))) return;
+      setRestDay(true); uiToast('今日はお休み。ゆっくりしてね');
+    } else { setRestDay(false); uiToast('お休みを取り消しました'); }
+    renderList();
+  });
   function renderList() {
     updateBadge();
     $('#navTitle').textContent = state.reordering ? '並べ替え' : TAB_TITLE[state.tab];
@@ -1146,11 +1167,18 @@
         ? '<span>期限が近い順</span><span class="count">' + (items.length - doneCount) + '件</span>'
         : '<span>' + PERIOD_NAME[freq] + 'の完了</span><span class="count">' + doneCount + ' / ' + items.length + '</span>';
       scroll.appendChild(header);
+      const restable = freq === 'daily' && !state.reordering;
+      if (restable && isRestDay()) {
+        scroll.insertAdjacentHTML('beforeend', '<div class="rest-card"><span class="ri">🌙</span><span class="rt">今日はお休み<small>できたものだけチェックでOK</small></span><button data-rest="off">取り消す</button></div>');
+      }
 
       // 近日中のものは上に出しているので、ここでは外す（二重に出さない）
       const listed = state.reordering ? items : items.filter((i) => !isPinned(i));
       if (listed.length > 0) scroll.appendChild(makeGroup(listed, freq));
       totalRendered += items.length;
+      if (restable && !isRestDay() && doneCount < items.length) {
+        scroll.insertAdjacentHTML('beforeend', '<button class="rest-btn" data-rest="on">🌙 今日はお休みにする</button>');
+      }
 
       if (freq === 'yearly' && !state.reordering) {
         const offs = offSeasonItems();
@@ -1716,6 +1744,7 @@
   function shouldShowSlot(slot) {
     const m = SLOT_MODES[slot];
     if (!modeEnabled(slot)) return false;
+    if (isRestDay()) return false;
     const h = new Date().getHours();
     if (h < m.start || h >= m.end) return false;
     const items = slotItems(slot);
